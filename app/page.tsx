@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
-
+import { redirect } from "next/navigation";
 export default function Home() {
+  redirect("/login");
   const [status, setStatus] = useState<null | "loading" | "success" | "error">(null);
   const [response, setResponse] = useState<string>("");
 

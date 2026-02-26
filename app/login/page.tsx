@@ -185,9 +185,20 @@ export default function LoginPage() {
             <p className="mt-8 text-center text-xs text-muted-foreground">
               Authorized Personnel Only
             </p>
+
+            <div className="mt-4 text-center">
+              <a
+                href="/health"
+                className="text-xs text-muted-foreground hover:text-primary transition-colors"
+              >
+                System Health Check →
+              </a>
+            </div>
           </CardContent>
         </Card>
+
       </div>
+      
     </div>
   );
 }
