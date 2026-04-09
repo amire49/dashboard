@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import {
@@ -55,9 +55,9 @@ export default function OperatorDashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         <Sidebar role="operator" />
-        <main className="flex-1 overflow-auto bg-background p-6">
+        <main className="flex-1 overflow-y-auto bg-background p-6">
           <div className="space-y-4">
             <div className="h-8 w-64 animate-pulse rounded bg-muted" />
             <div className="h-32 animate-pulse rounded-lg bg-muted" />
@@ -73,16 +73,16 @@ export default function OperatorDashboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar role="operator" />
 
-      <main className="flex-1 overflow-auto bg-background p-6">
+      <main className="flex-1 overflow-y-auto bg-background p-6">
         {/* Greeting */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold">
             Welcome back, {user?.full_name ?? "Operator"}
           </h1>
-          <p className="text-sm text-muted-foreground">{todayLabel || "—"}</p>
+          <p className="text-sm text-muted-foreground">{todayLabel || "â€”"}</p>
         </div>
 
         {/* Station Hero */}
@@ -128,7 +128,7 @@ export default function OperatorDashboardPage() {
               </div>
               <div>
                 <p className="font-mono text-2xl font-semibold">
-                  {data?.pending_incidents ?? "—"}
+                  {data?.pending_incidents ?? "â€”"}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Pending Incidents
@@ -149,7 +149,7 @@ export default function OperatorDashboardPage() {
               </div>
               <div>
                 <p className="font-mono text-2xl font-semibold">
-                  {data?.total_incidents_today ?? "—"}
+                  {data?.total_incidents_today ?? "â€”"}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Total Incidents Today
@@ -207,3 +207,4 @@ export default function OperatorDashboardPage() {
     </div>
   );
 }
+

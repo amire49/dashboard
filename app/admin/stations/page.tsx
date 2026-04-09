@@ -1,12 +1,20 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
-import { Building2, Plus, Trash2 } from "lucide-react";
+import { Building2, Plus, Trash2, AlertTriangle, CheckCircle, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -62,6 +70,17 @@ export default function StationsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; stationId: string | null; stationName: string }>({
+    open: false,
+    stationId: null,
+    stationName: "",
+  });
+  const [alertDialog, setAlertDialog] = useState<{ open: boolean; type: "success" | "error"; message: string }>({
+    open: false,
+    type: "success",
+    message: "",
+  });
 
   async function fetchStations() {
     setLoading(true);
@@ -106,9 +125,52 @@ export default function StationsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Are you sure you want to delete this station?")) return;
-    await stationsAPI.delete(id);
-    await fetchStations();
+    setDeletingId(id);
+    setDeleteDialog({ open: false, stationId: null, stationName: "" });
+    
+    try {
+      const success = await stationsAPI.delete(id);
+      
+      if (success) {
+        // Remove from local state immediately for better UX
+        setStations(prev => prev.filter(s => s.id !== id));
+        setAlertDialog({
+          open: true,
+          type: "success",
+          message: "Station deleted successfully!",
+        });
+        // Refresh to ensure consistency
+        await fetchStations();
+      } else {
+        setAlertDialog({
+          open: true,
+          type: "error",
+          message: "Failed to delete station. Please check your permissions or try again.",
+        });
+      }
+    } catch (error) {
+      setAlertDialog({
+        open: true,
+        type: "error",
+        message: "An error occurred while deleting the station. Please check your connection and try again.",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function openDeleteDialog(station: Station) {
+    setDeleteDialog({
+      open: true,
+      stationId: station.id,
+      stationName: station.name,
+    });
+  }
+
+  function confirmDelete() {
+    if (deleteDialog.stationId) {
+      handleDelete(deleteDialog.stationId);
+    }
   }
 
   function updateField(field: string, value: string) {
@@ -116,10 +178,10 @@ export default function StationsPage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar role="admin" />
 
-      <main className="flex-1 overflow-auto bg-background p-6">
+      <main className="flex-1 overflow-y-auto bg-background p-6">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -324,11 +386,12 @@ export default function StationsPage() {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => handleDelete(station.id)}
+                        onClick={() => openDeleteDialog(station)}
+                        disabled={deletingId === station.id}
                         className="gap-1"
                       >
                         <Trash2 className="h-3 w-3" />
-                        Delete
+                        {deletingId === station.id ? "Deleting..." : "Delete"}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -338,6 +401,60 @@ export default function StationsPage() {
           </Card>
         )}
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete Station
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{deleteDialog.stationName}</strong>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialog({ open: false, stationId: null, stationName: "" })}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Delete Station
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Alert Dialog */}
+      <Dialog open={alertDialog.open} onOpenChange={(open) => setAlertDialog({ ...alertDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {alertDialog.type === "success" ? (
+                <>
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  Success
+                </>
+              ) : (
+                <>
+                  <X className="h-5 w-5 text-destructive" />
+                  Error
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>{alertDialog.message}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setAlertDialog({ ...alertDialog, open: false })}>
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
