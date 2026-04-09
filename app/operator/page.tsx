@@ -187,9 +187,9 @@ export default function OperatorDashboardPage() {
                   {data.recent_incidents.map((incident) => (
                     <TableRow key={incident.id}>
                       <TableCell className="font-medium">
-                        {incident.type}
+                        {incident.category}
                       </TableCell>
-                      <TableCell>{incident.location}</TableCell>
+                      <TableCell>{incident.address_line || 'N/A'}</TableCell>
                       <TableCell>
                         <Badge variant="outline">{incident.status}</Badge>
                       </TableCell>
