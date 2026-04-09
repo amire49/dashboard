@@ -194,7 +194,7 @@ export default function OperatorDashboardPage() {
                         <Badge variant="outline">{incident.status}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {incident.time}
+                        {new Date(incident.created_at).toLocaleString()}
                       </TableCell>
                     </TableRow>
                   ))}
