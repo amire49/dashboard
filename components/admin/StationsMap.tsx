@@ -16,14 +16,17 @@ function getStationColor(type: string): string {
 
 function makeStationIcon(type: string, isActive: boolean): string {
   const color = getStationColor(type);
-  const opacity = isActive ? "1" : "0.4";
-  
+  const opacity = isActive ? "1" : "0.5";
+
+  // Google Maps-style pin: teardrop shape with white hole
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-      <circle cx="16" cy="16" r="14" fill="${color}" opacity="${opacity}" stroke="white" stroke-width="2"/>
-      <circle cx="16" cy="16" r="6" fill="white"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="44" viewBox="0 0 36 44">
+      <g opacity="${opacity}">
+        <path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 26 18 26S36 31.5 36 18C36 8.06 27.94 0 18 0z" fill="${color}"/>
+        <circle cx="18" cy="17" r="7" fill="white"/>
+      </g>
     </svg>`.trim();
-  
+
   return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
 
@@ -117,9 +120,9 @@ export default function StationsMap({ stations }: Props) {
         
         const icon = L.icon({
           iconUrl: makeStationIcon(station.type, station.is_active),
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
-          popupAnchor: [0, -16],
+          iconSize: [36, 44],
+          iconAnchor: [18, 44], // anchor at the bottom tip
+          popupAnchor: [0, -44],
         });
 
         const marker = L.marker([lat, lng], { icon });
@@ -139,10 +142,10 @@ export default function StationsMap({ stations }: Props) {
         const tooltip = marker.bindTooltip(permanentTooltipContent, {
           permanent: true,
           direction: "bottom",
-          offset: [0, 12],
+          offset: [0, 8],
           opacity: 1,
           className: "permanent-tooltip",
-          interactive: true, // Make tooltip interactive so it can be clicked
+          interactive: true,
         });
 
         // Add click event to tooltip element after it's created
@@ -218,40 +221,39 @@ export default function StationsMap({ stations }: Props) {
           className: "custom-popup",
         });
 
-        // Open popup and animate on click only
+        // Open popup on click - use filter glow instead of scale to avoid position shift
         marker.on('click', function(this: any) {
           this.openPopup();
-          // Add scale animation to marker
-          const icon = this.getElement();
-          if (icon) {
-            icon.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
-            icon.style.transform = 'scale(1.2)';
-            icon.style.zIndex = '1000';
+          const el = this.getElement();
+          if (el) {
+            el.style.transition = 'filter 0.2s ease';
+            el.style.filter = 'drop-shadow(0 0 8px rgba(0,0,0,0.5)) brightness(1.15)';
+            el.style.zIndex = '1000';
           }
         });
 
-        // Reset marker scale when popup closes
+        // Reset on popup close
         marker.on('popupclose', function(this: any) {
-          const icon = this.getElement();
-          if (icon) {
-            icon.style.transform = 'scale(1)';
-            icon.style.zIndex = '';
+          const el = this.getElement();
+          if (el) {
+            el.style.filter = '';
+            el.style.zIndex = '';
           }
         });
 
-        // Subtle hover effect without opening popup
+        // Subtle hover glow - no movement
         marker.on('mouseover', function(this: any) {
-          const icon = this.getElement();
-          if (icon && !this.isPopupOpen()) {
-            icon.style.transition = 'transform 0.2s ease';
-            icon.style.transform = 'scale(1.1)';
+          const el = this.getElement();
+          if (el && !this.isPopupOpen()) {
+            el.style.transition = 'filter 0.2s ease';
+            el.style.filter = 'drop-shadow(0 4px 8px rgba(0,0,0,0.35)) brightness(1.1)';
           }
         });
 
         marker.on('mouseout', function(this: any) {
-          const icon = this.getElement();
-          if (icon && !this.isPopupOpen()) {
-            icon.style.transform = 'scale(1)';
+          const el = this.getElement();
+          if (el && !this.isPopupOpen()) {
+            el.style.filter = '';
           }
         });
 
@@ -291,19 +293,14 @@ export default function StationsMap({ stations }: Props) {
         }
         .leaflet-tooltip.permanent-tooltip:hover {
           box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
-          transform: translateY(-2px);
         }
         .leaflet-tooltip.permanent-tooltip::before {
           border-top-color: white !important;
         }
         
-        /* Marker hover effect */
+        /* Marker hover effect - use filter only, no transform to prevent position shift */
         .leaflet-marker-icon {
-          transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
           cursor: pointer !important;
-        }
-        .leaflet-marker-icon:hover {
-          filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3)) !important;
         }
         
         /* Popup styles */
@@ -325,16 +322,24 @@ export default function StationsMap({ stations }: Props) {
           box-shadow: 0 3px 14px rgba(0, 0, 0, 0.1);
         }
         .custom-popup a.leaflet-popup-close-button {
-          color: #9ca3af;
-          font-size: 24px;
-          padding: 8px 12px;
-          transition: all 0.2s ease;
+          width: 28px !important;
+          height: 28px !important;
+          top: 10px !important;
+          right: 10px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          border-radius: 50% !important;
+          background: #f3f4f6 !important;
+          color: #6b7280 !important;
+          font-size: 18px !important;
+          line-height: 1 !important;
+          padding: 0 !important;
+          transition: background 0.2s ease, color 0.2s ease !important;
         }
         .custom-popup a.leaflet-popup-close-button:hover {
-          color: #ef4444;
-          background: #fef2f2;
-          border-radius: 8px;
-          transform: scale(1.1);
+          background: #fee2e2 !important;
+          color: #ef4444 !important;
         }
         
         /* Popup animation */
