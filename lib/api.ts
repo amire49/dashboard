@@ -16,7 +16,7 @@ import type {
 } from "@/types";
 
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://eras-backend.onrender.com";
+  process.env.NEXT_PUBLIC_API_URL || "https://eras-api.onrender.com";
 
 // Capture native fetch before any browser extension can monkey-patch it
 const nativeFetch: typeof fetch =
