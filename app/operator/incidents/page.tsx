@@ -72,8 +72,8 @@ function AudioPlayer({ url }: { url: string }) {
       setCurrentTime(0);
     });
     
-    audio.addEventListener("error", (e) => {
-      console.error("Audio error:", e);
+    audio.addEventListener("error", () => {
+      // Silently handle audio loading errors - show user-friendly message instead
       setError("Unable to load audio file. Please check the file format or URL.");
     });
     
@@ -571,6 +571,50 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
                       {data.distance_to_station_km.toFixed(1)} km away
                     </span>
                   )}
+                  
+                  {/* Directions button */}
+                  {coords && data.assigned_station.latitude && data.assigned_station.longitude && (
+                    <div className="mt-3 space-y-2">
+                      <a
+                        href={`https://www.google.com/maps/dir/${data.assigned_station.latitude},${data.assigned_station.longitude}/${coords[0]},${coords[1]}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-between rounded-xl px-4 py-3 text-sm font-semibold transition-all hover:shadow-md"
+                        style={{
+                          backgroundColor: cfg.color,
+                          color: "white",
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Navigation className="h-4 w-4" />
+                          <div className="text-left">
+                            <div>Get Directions to Incident</div>
+                            <div className="text-xs font-normal opacity-90">
+                              From {data.assigned_station.name}
+                            </div>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4" />
+                      </a>
+                      
+                      <button
+                        onClick={() => {
+                          const directionsUrl = `https://www.google.com/maps/dir/${data.assigned_station!.latitude},${data.assigned_station!.longitude}/${coords[0]},${coords[1]}`;
+                          navigator.clipboard.writeText(directionsUrl);
+                          setToast({ ok: true, msg: "Directions link copied to clipboard" });
+                          setTimeout(() => setToast(null), 2000);
+                        }}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted"
+                        style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Copy Directions Link
+                      </button>
+                    </div>
+                  )}
                 </DetailField>
               </div>
             )}
@@ -713,16 +757,6 @@ export default function IncidentsPage() {
 
   const isFiltered = categoryFilter !== "all" || statusFilter !== "all";
 
-  // Close modal on Escape key
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") closeDetail();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   if (checking) return null;
   if (loading)  return <PageSkeleton />;
 
@@ -740,33 +774,6 @@ export default function IncidentsPage() {
       </div>
     );
   }
-
-  const detailModal = selected ? (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-        onClick={closeDetail}
-      />
-      {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-        <div
-          className="pointer-events-auto w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden flex flex-col"
-          style={{
-            maxHeight: "90vh",
-            backgroundColor: "var(--card)",
-            color: "var(--card-foreground)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <IncidentDetailPanel
-            incident={selected} detail={detail} loadingDetail={loadingDetail}
-            onClose={closeDetail} onStatusUpdate={handleStatusUpdate}
-          />
-        </div>
-      </div>
-    </>
-  ) : null;
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -821,9 +828,9 @@ export default function IncidentsPage() {
 
         {/* ── LIST VIEW ── */}
         {view === "list" && (
-          <div>
-            {/* Left column */}
-            <div className="w-full">
+          <div className="grid grid-cols-12 gap-4">
+            {/* Left column - List */}
+            <div className={selected ? "col-span-7" : "col-span-12"}>
 
               {/* Filter bar */}
               <Card className="mb-4 border-0 shadow-sm rounded-xl">
@@ -898,11 +905,12 @@ export default function IncidentsPage() {
                       <TableBody>
                         {filtered.map(incident => {
                           const isRouted = normalizeStatus(incident.status) === "routed";
+                          const isSelected = selected?.id === incident.id;
                           return (
                             <TableRow key={incident.id} onClick={() => openDetail(incident)}
                               className="cursor-pointer transition-colors"
                               style={{
-                                backgroundColor: isRouted ? "#ef444406" : undefined,
+                                backgroundColor: isSelected ? "var(--muted)" : isRouted ? "#ef444406" : undefined,
                                 borderLeft: isRouted ? "3px solid #ef4444" : "3px solid transparent",
                               }}>
                               <TableCell className="py-3.5">
@@ -932,11 +940,20 @@ export default function IncidentsPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Right column - Detail Panel */}
+            {selected && (
+              <div className="col-span-5">
+                <Card className="border-0 shadow-sm rounded-xl overflow-hidden sticky top-0" style={{ maxHeight: "calc(100vh - 180px)" }}>
+                  <IncidentDetailPanel
+                    incident={selected} detail={detail} loadingDetail={loadingDetail}
+                    onClose={closeDetail} onStatusUpdate={handleStatusUpdate}
+                  />
+                </Card>
+              </div>
+            )}
           </div>
         )}
-
-        {/* ── Modal ── */}
-        {detailModal}
 
       </main>
     </div>

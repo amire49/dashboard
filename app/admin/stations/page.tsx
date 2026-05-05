@@ -62,6 +62,7 @@ export default function StationsPage() {
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -134,6 +135,13 @@ export default function StationsPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  // Filter stations based on status
+  const filteredStations = stations.filter(station => {
+    if (statusFilter === "active") return station.is_active;
+    if (statusFilter === "inactive") return !station.is_active;
+    return true; // "all"
+  });
+
   const accentColor = typeColors[form.type];
 
   return (
@@ -147,10 +155,33 @@ export default function StationsPage() {
             <h1 className="text-2xl font-bold">Stations</h1>
             <Badge variant="secondary" className="font-mono">{stations.length}</Badge>
           </div>
-          <Button onClick={() => setShowAddModal(true)} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Station
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Status Filter */}
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "active" | "inactive")}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Stations</SelectItem>
+                <SelectItem value="active">
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-green-600 animate-pulse" />
+                    Active Only
+                  </span>
+                </SelectItem>
+                <SelectItem value="inactive">
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-gray-400" />
+                    Inactive Only
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={() => setShowAddModal(true)} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Station
+            </Button>
+          </div>
         </div>
 
         {/* Table */}
@@ -162,8 +193,19 @@ export default function StationsPage() {
             <p className="text-lg font-medium">No stations yet</p>
             <p className="text-sm text-muted-foreground">Create your first station to get started</p>
           </Card>
+        ) : filteredStations.length === 0 ? (
+          <Card className="flex flex-col items-center justify-center py-16">
+            <Building2 className="mb-4 h-12 w-12 text-muted-foreground" />
+            <p className="text-lg font-medium">No {statusFilter} stations found</p>
+            <p className="text-sm text-muted-foreground">Try changing the filter or add a new station</p>
+          </Card>
         ) : (
           <Card>
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Showing <span className="font-semibold text-foreground">{filteredStations.length}</span> of <span className="font-semibold text-foreground">{stations.length}</span> stations
+              </p>
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -177,7 +219,7 @@ export default function StationsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {stations.map((station) => (
+                {filteredStations.map((station) => (
                   <TableRow key={station.id}>
                     <TableCell className="font-medium">{station.name}</TableCell>
                     <TableCell>
