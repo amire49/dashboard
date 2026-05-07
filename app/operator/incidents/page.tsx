@@ -6,7 +6,7 @@ import {
   Siren, AlertTriangle, CheckCircle, Clock, Filter,
   X, MapPin, User, FileText, Tag, ChevronRight,
   ArrowRight, Loader2, List, Map, Volume2, Building2,
-  Navigation, RefreshCw, Activity, TrendingUp, Play, Pause,
+  Navigation, RefreshCw, Activity, TrendingUp, Play, Pause, Wifi, WifiOff,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import {
 import Sidebar from "@/components/layout/Sidebar";
 import { incidentsAPI } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
+import { useWebSocket } from "@/lib/useWebSocket";
 import type { Incident } from "@/types";
 
 const IncidentMap = dynamic(() => import("@/components/incidents/IncidentMap"), {
@@ -575,8 +576,15 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
                   {/* Directions button */}
                   {coords && data.assigned_station.latitude && data.assigned_station.longitude && (
                     <div className="mt-3 space-y-2">
+                      {/* Show exact coordinates */}
+                      <div className="rounded-lg border px-3 py-2 text-xs"
+                        style={{ backgroundColor: "var(--muted)", borderColor: "var(--border)" }}>
+                        <p className="font-semibold mb-1 text-muted-foreground">Incident Location:</p>
+                        <p className="font-mono">{coords[0].toFixed(6)}, {coords[1].toFixed(6)}</p>
+                      </div>
+                      
                       <a
-                        href={`https://www.google.com/maps/dir/${data.assigned_station.latitude},${data.assigned_station.longitude}/${coords[0]},${coords[1]}`}
+                        href={`https://www.google.com/maps/dir/${Number(data.assigned_station.latitude).toFixed(6)},${Number(data.assigned_station.longitude).toFixed(6)}/${coords[0].toFixed(6)},${coords[1].toFixed(6)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center justify-between rounded-xl px-4 py-3 text-sm font-semibold transition-all hover:shadow-md"
@@ -599,8 +607,9 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
                       
                       <button
                         onClick={() => {
-                          const directionsUrl = `https://www.google.com/maps/dir/${data.assigned_station!.latitude},${data.assigned_station!.longitude}/${coords[0]},${coords[1]}`;
+                          const directionsUrl = `https://www.google.com/maps/dir/${Number(data.assigned_station!.latitude).toFixed(6)},${Number(data.assigned_station!.longitude).toFixed(6)}/${coords[0].toFixed(6)},${coords[1].toFixed(6)}`;
                           navigator.clipboard.writeText(directionsUrl);
+                          console.log("Directions URL:", directionsUrl);
                           setToast({ ok: true, msg: "Directions link copied to clipboard" });
                           setTimeout(() => setToast(null), 2000);
                         }}
@@ -708,6 +717,71 @@ export default function IncidentsPage() {
   const [selected, setSelected]   = useState<Incident | null>(null);
   const [detail, setDetail]       = useState<Incident | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [notification, setNotification] = useState<{ show: boolean; message: string; type: "new" | "update" }>({ 
+    show: false, message: "", type: "new" 
+  });
+
+  // WebSocket connection for real-time updates
+  // NOTE: Set enabled to false if backend WebSocket is not ready yet
+  const { isConnected, lastMessage, connectionError } = useWebSocket("/ws/operator/incidents/", {
+    enabled: false, // TODO: Set to true once backend WebSocket endpoint is confirmed
+    onMessage: (message) => {
+      console.log("Received WebSocket message:", message);
+      
+      if (message.type === "incident_created") {
+        // New incident created
+        const newIncident = message.incident as Incident;
+        setIncidents(prev => [newIncident, ...prev]);
+        
+        // Show notification
+        setNotification({
+          show: true,
+          message: `New ${newIncident.category} incident reported!`,
+          type: "new"
+        });
+        
+        // Play notification sound (optional)
+        if (typeof window !== "undefined" && "Audio" in window) {
+          try {
+            const audio = new Audio("/notification.mp3");
+            audio.play().catch(() => console.log("Could not play notification sound"));
+          } catch (e) {
+            console.log("Audio not available");
+          }
+        }
+        
+        // Auto-hide notification after 5 seconds
+        setTimeout(() => setNotification(prev => ({ ...prev, show: false })), 5000);
+      } else if (message.type === "incident_updated" || message.type === "incident_status_changed") {
+        // Incident updated
+        const updatedIncident = message.incident as Incident;
+        setIncidents(prev => prev.map(i => i.id === updatedIncident.id ? updatedIncident : i));
+        
+        // Update detail view if this incident is currently selected
+        if (selected?.id === updatedIncident.id) {
+          setDetail(updatedIncident);
+          setSelected(updatedIncident);
+        }
+        
+        // Show notification
+        setNotification({
+          show: true,
+          message: `Incident status updated to ${updatedIncident.status}`,
+          type: "update"
+        });
+        
+        setTimeout(() => setNotification(prev => ({ ...prev, show: false })), 3000);
+      }
+    },
+    onConnect: () => {
+      console.log("Connected to incident notifications");
+    },
+    onDisconnect: () => {
+      console.log("Disconnected from incident notifications");
+    },
+    autoReconnect: true,
+    reconnectInterval: 5000,
+  });
 
   async function fetchIncidents() {
     setLoading(true);
@@ -789,7 +863,23 @@ export default function IncidentsPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Incidents</h1>
-              <p className="text-sm text-muted-foreground">{incidents.length} total incidents</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-muted-foreground">{incidents.length} total incidents</p>
+                {/* WebSocket connection indicator */}
+                <span className="flex items-center gap-1 text-xs">
+                  {isConnected ? (
+                    <>
+                      <Wifi className="h-3 w-3 text-green-600" />
+                      <span className="text-green-600">Live</span>
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">Offline</span>
+                    </>
+                  )}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -814,6 +904,30 @@ export default function IncidentsPage() {
             </div>
           </div>
         </div>
+
+        {/* Real-time notification banner */}
+        {notification.show && (
+          <div className="mb-4 animate-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center gap-3 rounded-xl border px-4 py-3"
+              style={{
+                backgroundColor: notification.type === "new" ? "#ef444408" : "color-mix(in oklch, var(--chart-4) 8%, transparent)",
+                borderColor: notification.type === "new" ? "#ef444433" : "color-mix(in oklch, var(--chart-4) 30%, transparent)",
+              }}>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                style={{
+                  backgroundColor: notification.type === "new" ? "#ef444415" : "color-mix(in oklch, var(--chart-4) 15%, transparent)",
+                  color: notification.type === "new" ? "#ef4444" : "var(--chart-4)",
+                }}>
+                {notification.type === "new" ? <Siren className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
+              </div>
+              <p className="flex-1 text-sm font-medium">{notification.message}</p>
+              <button onClick={() => setNotification(prev => ({ ...prev, show: false }))}
+                className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Stat cards ── */}
         <StatCards incidents={incidents} />

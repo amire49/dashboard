@@ -18,7 +18,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import type { AdminDashboardData, Station } from "@/types";
 import { dashboardAPI, stationsAPI } from "@/lib/api";
 
-const StationsMap = dynamic(() => import("@/components/admin/StationsMap"), {
+const StationsMap = dynamic(() => import("@/components/admin/EnhancedStationsMap"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center rounded-xl bg-muted/30">
@@ -135,12 +135,12 @@ export default function AdminDashboardPage() {
   ];
 
   const quickActions = [
-    { href: "/admin/stations",  label: "Manage Stations",  icon: Building2,     desc: "Add, edit, or remove stations",       soon: false },
-    { href: "/admin/operators", label: "Manage Operators", icon: Users,         desc: "Create and manage operator accounts", soon: false },
-    { href: "/admin/citizens",  label: "View Citizens",    icon: UserCheck,     desc: "Browse all registered citizens",      soon: false },
-    { href: "/admin/kyc",       label: "KYC Review",       icon: ClipboardList, desc: "Review pending identity submissions", soon: false },
-    { href: "#",                label: "Citizens App",     icon: Shield,        desc: "Manage citizen mobile app",           soon: true },
-    { href: "#",                label: "KYC Settings",     icon: ClipboardList, desc: "Configure KYC requirements",          soon: true },
+    { href: "/admin/stations",  label: "Manage Stations",  icon: Building2,     desc: "Add, edit, or remove stations",       soon: false, external: false },
+    { href: "/admin/operators", label: "Manage Operators", icon: Users,         desc: "Create and manage operator accounts", soon: false, external: false },
+    { href: "/admin/citizens",  label: "View Citizens",    icon: UserCheck,     desc: "Browse all registered citizens",      soon: false, external: false },
+    { href: "https://kyc-micro-service.onrender.com/admin/dashboard/", label: "Review KYC", icon: ClipboardList, desc: "Review pending identity submissions", soon: false, external: true },
+    { href: "#",                label: "Citizens App",     icon: Shield,        desc: "Manage citizen mobile app",           soon: true, external: false },
+    { href: "#",                label: "KYC Settings",     icon: ClipboardList, desc: "Configure KYC requirements",          soon: true, external: false },
   ];
 
   return (
@@ -457,38 +457,12 @@ export default function AdminDashboardPage() {
         {/* ── Stations Map ── */}
         <div className="mt-6">
           <p className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Registered Stations
+            Emergency Response Network
           </p>
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-3 pt-5 px-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base font-semibold">Station Locations</CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {stations.length} stations registered • Hover for details
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#7c3aed" }} />
-                    <span className="text-xs text-muted-foreground">Police</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#059669" }} />
-                    <span className="text-xs text-muted-foreground">Medical</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#ef4444" }} />
-                    <span className="text-xs text-muted-foreground">Fire</span>
-                  </div>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="px-5 pb-5">
-              <div className="h-[500px] rounded-xl overflow-hidden border">
-                <StationsMap stations={stations} />
-              </div>
-            </CardContent>
+          <Card className="border-0 shadow-sm overflow-hidden">
+            <div className="h-[600px]">
+              <StationsMap stations={stations} />
+            </div>
           </Card>
         </div>
 
