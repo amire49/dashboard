@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, IBM_Plex_Mono, Manrope } from "next/font/google";
+import { ToastProvider } from "@/lib/toast-context";
 import "./globals.css";
 
 const inter = Inter({
@@ -42,7 +43,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${manrope.variable} ${ibmPlexMono.variable}`}>
       <body className="font-sans antialiased" suppressHydrationWarning>
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

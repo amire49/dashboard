@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import {
   Siren, AlertTriangle, CheckCircle, Clock, Filter,
@@ -12,7 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Toast, ToastContainer } from "@/components/ui/toast";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -21,9 +20,10 @@ import {
 } from "@/components/ui/table";
 import Sidebar from "@/components/layout/Sidebar";
 import { incidentsAPI } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
-import { useWebSocket } from "@/lib/useWebSocket";
 import { useToast } from "@/lib/useToast";
+import { useIncidentSocket } from "@/lib/useIncidentSocket";
 import type { Incident } from "@/types";
 
 const IncidentMap = dynamic(() => import("@/components/incidents/IncidentMap"), {
@@ -50,105 +50,136 @@ const INCIDENT_STATUSES   = ["all", "routed", "in_progress", "resolved"] as cons
 type FilterCategory = (typeof INCIDENT_CATEGORIES)[number];
 type FilterStatus   = (typeof INCIDENT_STATUSES)[number];
 
-// ── Audio Player Component ────────────────────────────────────────────────────
+// ── Error Boundary ────────────────────────────────────────────────────────────
+
+class IncidentsErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-screen overflow-hidden">
+          <Sidebar role="operator" />
+          <main className="flex-1 overflow-y-auto bg-background p-6">
+            <div className="flex items-center gap-4 rounded-xl border p-5" style={{
+              borderColor: "#ef444433", backgroundColor: "#ef444408",
+            }}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl"
+                style={{ backgroundColor: "#ef444415", color: "#ef4444" }}>
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold" style={{ color: "#ef4444" }}>Something went wrong</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  An unexpected error occurred. Please refresh the page.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                Reload
+              </Button>
+            </div>
+          </main>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ── Audio Player ──────────────────────────────────────────────────────────────
+
 function AudioPlayer({ url }: { url: string }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
-  const [audioBlob, setAudioBlob] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Fetch audio with authentication
+    let cancelled = false;
+
     const fetchAudio = async () => {
       try {
-        const token = localStorage.getItem("access_token");
+        // Use the correct storage key (eras_access_token, not access_token).
+        const token = getAccessToken();
         if (!token) {
           setError("Authentication required to play audio");
           return;
         }
 
         const response = await fetch(url, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to load audio: ${response.status}`);
+          throw new Error(`HTTP ${response.status}`);
         }
 
         const blob = await response.blob();
+        if (cancelled) return;
+
         const blobUrl = URL.createObjectURL(blob);
-        setAudioBlob(blobUrl);
+        blobUrlRef.current = blobUrl;
 
         const audio = new Audio(blobUrl);
         audio.preload = "metadata";
-        
-        audio.addEventListener("loadedmetadata", () => {
-          setDuration(audio.duration);
-        });
-        
-        audio.addEventListener("timeupdate", () => {
-          setCurrentTime(audio.currentTime);
-        });
-        
-        audio.addEventListener("ended", () => {
-          setIsPlaying(false);
-          setCurrentTime(0);
-        });
-        
-        audio.addEventListener("error", () => {
-          setError("Unable to play audio file. Please check the file format.");
-        });
-        
-        setAudioRef(audio);
-      } catch (err) {
-        console.error("Audio fetch error:", err);
-        setError("Unable to load audio file. Please try again later.");
+        audio.addEventListener("loadedmetadata", () => setDuration(audio.duration));
+        audio.addEventListener("timeupdate", () => setCurrentTime(audio.currentTime));
+        audio.addEventListener("ended", () => { setIsPlaying(false); setCurrentTime(0); });
+        audio.addEventListener("error", () => setError("Unable to play audio file."));
+        audioRef.current = audio;
+      } catch {
+        if (!cancelled) setError("Unable to load audio. Please try again.");
       }
     };
 
     fetchAudio();
-    
+
     return () => {
-      if (audioRef) {
-        audioRef.pause();
-        audioRef.src = "";
-      }
-      if (audioBlob) {
-        URL.revokeObjectURL(audioBlob);
-      }
+      cancelled = true;
+      audioRef.current?.pause();
+      if (audioRef.current) audioRef.current.src = "";
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
     };
+    // Re-fetch only when the URL changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
   const togglePlay = () => {
-    if (!audioRef) return;
-    
+    const audio = audioRef.current;
+    if (!audio) return;
     if (isPlaying) {
-      audioRef.pause();
+      audio.pause();
+      setIsPlaying(false);
     } else {
-      audioRef.play().catch(err => {
-        console.error("Playback error:", err);
-        setError("Playback failed. The audio format may not be supported.");
-      });
+      audio.play().catch(() => setError("Playback failed. Format may not be supported."));
+      setIsPlaying(true);
     }
-    setIsPlaying(!isPlaying);
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!audioRef) return;
-    const time = parseFloat(e.target.value);
-    audioRef.currentTime = time;
-    setCurrentTime(time);
+    const audio = audioRef.current;
+    if (!audio) return;
+    const t = parseFloat(e.target.value);
+    audio.currentTime = t;
+    setCurrentTime(t);
   };
 
-  const formatTime = (seconds: number) => {
-    if (!isFinite(seconds)) return "0:00";
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  const formatTime = (s: number) => {
+    if (!isFinite(s)) return "0:00";
+    return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
   };
 
   if (error) {
@@ -163,21 +194,17 @@ function AudioPlayer({ url }: { url: string }) {
     <div className="mt-1 flex items-center gap-3 rounded-lg border border-border bg-muted/5 px-3 py-2">
       <button
         onClick={togglePlay}
+        disabled={!audioRef.current || duration === 0}
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:bg-primary/90"
-        disabled={!audioRef || duration === 0}
       >
         {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
       </button>
-      
       <div className="flex-1">
         <input
-          type="range"
-          min="0"
-          max={duration || 0}
-          value={currentTime}
+          type="range" min="0" max={duration || 0} value={currentTime}
           onChange={handleSeek}
+          disabled={!audioRef.current || duration === 0}
           className="w-full h-1 bg-muted rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0"
-          disabled={!audioRef || duration === 0}
         />
         <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
           <span>{formatTime(currentTime)}</span>
@@ -187,6 +214,8 @@ function AudioPlayer({ url }: { url: string }) {
     </div>
   );
 }
+
+// ── Status / Category helpers ─────────────────────────────────────────────────
 
 function normalizeStatus(s: string) {
   return s.toLowerCase().replace(/\s+/g, "_");
@@ -205,8 +234,6 @@ function nextStatusLabel(current: string) {
   if (n === "resolved")    return "Mark Resolved";
   return "";
 }
-
-// ── Badges ────────────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
   const s = normalizeStatus(status);
@@ -256,8 +283,7 @@ function CategoryBadge({ category }: { category: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize"
       style={{
-        backgroundColor: `${color}18`,
-        color,
+        backgroundColor: `${color}18`, color,
         border: `1px solid ${color}33`,
       }}>
       {cfg?.icon && <span className="text-[10px]">{cfg.icon}</span>}
@@ -266,7 +292,7 @@ function CategoryBadge({ category }: { category: string }) {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Misc helpers ──────────────────────────────────────────────────────────────
 
 function formatTime(raw: string) {
   try {
@@ -299,10 +325,10 @@ function StatCards({ incidents }: { incidents: Incident[] }) {
   const resolved   = incidents.filter(i => normalizeStatus(i.status) === "resolved").length;
 
   const stats = [
-    { label: "Total",       value: total,      icon: Activity,    color: "var(--primary)" },
+    { label: "Total",       value: total,      icon: Activity,      color: "var(--primary)" },
     { label: "Routed",      value: routed,      icon: AlertTriangle, color: "#ef4444" },
-    { label: "In Progress", value: inProgress,  icon: TrendingUp,  color: "var(--chart-4)" },
-    { label: "Resolved",    value: resolved,    icon: CheckCircle, color: "var(--chart-2)" },
+    { label: "In Progress", value: inProgress,  icon: TrendingUp,    color: "var(--chart-4)" },
+    { label: "Resolved",    value: resolved,    icon: CheckCircle,   color: "var(--chart-2)" },
   ];
 
   return (
@@ -325,14 +351,13 @@ function StatCards({ incidents }: { incidents: Incident[] }) {
   );
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
+// ── Page Skeleton ─────────────────────────────────────────────────────────────
 
 function PageSkeleton() {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar role="operator" />
       <main className="flex-1 overflow-y-auto bg-background p-6">
-        {/* header */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 animate-pulse rounded-lg bg-muted" />
@@ -343,7 +368,6 @@ function PageSkeleton() {
           </div>
           <div className="h-9 w-36 animate-pulse rounded-lg bg-muted" />
         </div>
-        {/* stat cards */}
         <div className="mb-6 grid grid-cols-4 gap-3">
           {[0,1,2,3].map(i => (
             <Card key={i} className="border-0 shadow-sm">
@@ -357,7 +381,6 @@ function PageSkeleton() {
             </Card>
           ))}
         </div>
-        {/* filter bar */}
         <Card className="mb-4 border-0 shadow-sm">
           <CardContent className="flex items-center gap-3 p-4">
             <div className="h-4 w-4 animate-pulse rounded bg-muted" />
@@ -366,14 +389,13 @@ function PageSkeleton() {
             <div className="ml-auto h-4 w-20 animate-pulse rounded bg-muted" />
           </CardContent>
         </Card>
-        {/* table */}
         <Card className="border-0 shadow-sm">
           <CardHeader><div className="h-5 w-28 animate-pulse rounded bg-muted" /></CardHeader>
           <CardContent className="p-0">
             <table className="w-full">
               <thead>
                 <tr className="border-b" style={{ borderColor: "var(--border)" }}>
-                  {[96, 120, 200, 112, 112].map((w, i) => (
+                  {[96,120,200,112,112].map((w, i) => (
                     <th key={i} className="px-4 py-3 text-left">
                       <div className="h-3 animate-pulse rounded bg-muted" style={{ width: w }} />
                     </th>
@@ -385,7 +407,7 @@ function PageSkeleton() {
                   <tr key={row} className="border-b" style={{ borderColor: "var(--border)" }}>
                     <td className="px-4 py-3.5"><div className="h-5 w-16 animate-pulse rounded-full bg-muted" /></td>
                     <td className="px-4 py-3.5"><div className="h-4 w-28 animate-pulse rounded bg-muted" /></td>
-                    <td className="px-4 py-3.5"><div className="h-4 animate-pulse rounded bg-muted" style={{ width: `${120 + (row % 3) * 40}px` }} /></td>
+                    <td className="px-4 py-3.5"><div className="h-4 animate-pulse rounded bg-muted" style={{ width: `${120 + (row%3)*40}px` }} /></td>
                     <td className="px-4 py-3.5"><div className="h-5 w-20 animate-pulse rounded-full bg-muted" /></td>
                     <td className="px-4 py-3.5"><div className="h-4 w-24 animate-pulse rounded bg-muted" /></td>
                   </tr>
@@ -399,13 +421,12 @@ function PageSkeleton() {
   );
 }
 
-// ── Error / Empty ─────────────────────────────────────────────────────────────
+// ── Error / Empty states ──────────────────────────────────────────────────────
 
 function ErrorBanner({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex items-center gap-4 rounded-xl border p-5" style={{
-      borderColor: "#ef444433",
-      backgroundColor: "#ef444408",
+      borderColor: "#ef444433", backgroundColor: "#ef444408",
     }}>
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
         style={{ backgroundColor: "#ef444415", color: "#ef4444" }}>
@@ -468,8 +489,10 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
 }) {
   const data = detail ?? incident;
   const [updating, setUpdating] = useState(false);
-  const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null);
   const [showMap, setShowMap] = useState(false);
+
+  // Use the global toast singleton instead of local state.
+  const { success, error: toastError } = useToast();
 
   const cfg = CATEGORY_CONFIG[data.category?.toLowerCase()] ?? { color: "var(--primary)", icon: "" };
   const coords = latLng(data);
@@ -482,17 +505,16 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
     setUpdating(false);
     if (res) {
       onStatusUpdate(res);
-      setToast({ ok: true, msg: `Moved to "${next.replace("_", " ")}"` });
+      success("Status Updated", `Moved to "${next.replace("_", " ")}"`);
     } else {
-      setToast({ ok: false, msg: "Update failed. Try again." });
+      toastError("Update Failed", "Could not update status. Try again.");
     }
-    setTimeout(() => setToast(null), 3000);
   }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
 
-      {/* ── Panel header ── */}
+      {/* Panel header */}
       <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl text-base"
@@ -510,7 +532,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
         </button>
       </div>
 
-      {/* ── Status strip ── */}
+      {/* Status strip */}
       <div className="shrink-0 flex items-center gap-2.5 px-5 py-2.5 border-b"
         style={{ borderColor: "var(--border)", backgroundColor: "var(--muted)" }}>
         <StatusBadge status={data.status} />
@@ -519,7 +541,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
         )}
       </div>
 
-      {/* ── Scrollable content ── */}
+      {/* Scrollable content */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {loadingDetail ? (
           <div className="space-y-4 p-5">
@@ -530,7 +552,6 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
         ) : (
           <div className="divide-y" style={{ borderColor: "var(--border)" }}>
 
-            {/* Category + confidence */}
             <div className="px-5 py-4">
               <DetailField icon={Tag} label="Emergency Category">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -544,14 +565,12 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
               </DetailField>
             </div>
 
-            {/* Time */}
             <div className="px-5 py-4">
               <DetailField icon={Clock} label="Time Reported">
                 <span className="font-mono text-sm">{formatTimeFull(data.created_at)}</span>
               </DetailField>
             </div>
 
-            {/* Reporter */}
             <div className="px-5 py-4">
               <DetailField icon={User} label="Reported By">
                 <p className="font-semibold">{data.reporter?.full_name ?? "Unknown"}</p>
@@ -561,7 +580,6 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
               </DetailField>
             </div>
 
-            {/* Location */}
             <div className="px-5 py-4">
               <DetailField icon={MapPin} label="Location">
                 {coords ? (
@@ -595,7 +613,6 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
               </DetailField>
             </div>
 
-            {/* Assigned station */}
             {data.assigned_station && (
               <div className="px-5 py-4">
                 <DetailField icon={Building2} label="Assigned Station">
@@ -609,46 +626,33 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
                       {data.distance_to_station_km.toFixed(1)} km away
                     </span>
                   )}
-                  
-                  {/* Directions button */}
                   {coords && data.assigned_station.latitude && data.assigned_station.longitude && (
                     <div className="mt-3 space-y-2">
-                      {/* Show exact coordinates */}
                       <div className="rounded-lg border px-3 py-2 text-xs"
                         style={{ backgroundColor: "var(--muted)", borderColor: "var(--border)" }}>
                         <p className="font-semibold mb-1 text-muted-foreground">Incident Location:</p>
                         <p className="font-mono">{coords[0].toFixed(6)}, {coords[1].toFixed(6)}</p>
                       </div>
-                      
                       <a
                         href={`https://www.google.com/maps/dir/${Number(data.assigned_station.latitude).toFixed(6)},${Number(data.assigned_station.longitude).toFixed(6)}/${coords[0].toFixed(6)},${coords[1].toFixed(6)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        target="_blank" rel="noopener noreferrer"
                         className="flex items-center justify-between rounded-xl px-4 py-3 text-sm font-semibold transition-all hover:shadow-md"
-                        style={{
-                          backgroundColor: cfg.color,
-                          color: "white",
-                        }}
+                        style={{ backgroundColor: cfg.color, color: "white" }}
                       >
                         <div className="flex items-center gap-2">
                           <Navigation className="h-4 w-4" />
                           <div className="text-left">
                             <div>Get Directions to Incident</div>
-                            <div className="text-xs font-normal opacity-90">
-                              From {data.assigned_station.name}
-                            </div>
+                            <div className="text-xs font-normal opacity-90">From {data.assigned_station.name}</div>
                           </div>
                         </div>
                         <ChevronRight className="h-4 w-4" />
                       </a>
-                      
                       <button
                         onClick={() => {
-                          const directionsUrl = `https://www.google.com/maps/dir/${Number(data.assigned_station!.latitude).toFixed(6)},${Number(data.assigned_station!.longitude).toFixed(6)}/${coords[0].toFixed(6)},${coords[1].toFixed(6)}`;
-                          navigator.clipboard.writeText(directionsUrl);
-                          console.log("Directions URL:", directionsUrl);
-                          setToast({ ok: true, msg: "Directions link copied to clipboard" });
-                          setTimeout(() => setToast(null), 2000);
+                          const url = `https://www.google.com/maps/dir/${Number(data.assigned_station!.latitude).toFixed(6)},${Number(data.assigned_station!.longitude).toFixed(6)}/${coords[0].toFixed(6)},${coords[1].toFixed(6)}`;
+                          navigator.clipboard.writeText(url);
+                          success("Copied", "Directions link copied to clipboard");
                         }}
                         className="flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted"
                         style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}
@@ -665,7 +669,6 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
               </div>
             )}
 
-            {/* Audio */}
             {data.audio_url && (
               <div className="px-5 py-4">
                 <DetailField icon={Volume2} label="Audio Recording">
@@ -674,7 +677,6 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
               </div>
             )}
 
-            {/* Transcription */}
             <div className="px-5 py-4">
               <DetailField icon={FileText} label="Transcription">
                 {data.amharic_text || data.english_text ? (
@@ -704,29 +706,16 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
         )}
       </div>
 
-      {/* ── Footer action ── */}
+      {/* Footer action */}
       {!loadingDetail && (
-        <div className="shrink-0 border-t p-4 space-y-2.5" style={{ borderColor: "var(--border)" }}>
-          {toast && (
-            <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium"
-              style={{
-                backgroundColor: toast.ok ? "color-mix(in oklch, var(--chart-2) 12%, transparent)" : "#ef444412",
-                color: toast.ok ? "var(--chart-2)" : "#ef4444",
-                border: `1px solid ${toast.ok ? "color-mix(in oklch, var(--chart-2) 30%, transparent)" : "#ef444430"}`,
-              }}>
-              {toast.ok
-                ? <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
-              {toast.msg}
-            </div>
-          )}
+        <div className="shrink-0 border-t p-4" style={{ borderColor: "var(--border)" }}>
           {next ? (
             <Button className="w-full gap-2 rounded-xl" disabled={updating} onClick={handleStatusUpdate}
               style={next === "resolved"
                 ? { backgroundColor: "color-mix(in oklch, var(--chart-2) 85%, transparent)", color: "white" }
                 : undefined}>
               {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-              {updating ? "Updating..." : nextStatusLabel(data.status)}
+              {updating ? "Updating…" : nextStatusLabel(data.status)}
             </Button>
           ) : (
             <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium"
@@ -743,157 +732,30 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function IncidentsPage() {
+function IncidentsPageInner() {
   const { checking } = useAuth("operator");
-  const { toasts, success, info, dismiss } = useToast();
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const notifiedIncidentsRef = useRef<Set<string>>(new Set()); // Track notified incidents
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(false);
-  const [view, setView]           = useState<"list" | "map">("list");
-  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
-  const [statusFilter, setStatusFilter]     = useState<FilterStatus>("all");
-  const [selected, setSelected]   = useState<Incident | null>(null);
-  const [detail, setDetail]       = useState<Incident | null>(null);
+
+  const [selected, setSelected] = useState<Incident | null>(null);
+  const [detail, setDetail] = useState<Incident | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [notification, setNotification] = useState<{ show: boolean; message: string; type: "new" | "update" }>({ 
-    show: false, message: "", type: "new" 
+  const [view, setView] = useState<"list" | "map">("list");
+  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
+
+  const {
+    incidents,
+    setIncidents,
+    loading,
+    fetchError,
+    isConnected,
+    refresh,
+  } = useIncidentSocket({
+    onIncidentUpdated(updated) {
+      // Keep the detail panel in sync when the currently viewed incident changes.
+      setSelected(prev => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+      setDetail(prev => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+    },
   });
-
-  // WebSocket connection for real-time updates
-  const { isConnected, lastMessage, connectionError } = useWebSocket("/ws/operators/incidents/", {
-    enabled: true, // Enabled - WebSocket endpoint confirmed
-    onConnect: () => {
-      console.log("✅ WebSocket connected - Real-time updates enabled");
-      info("🔗 Connected", "Real-time updates enabled");
-    },
-    onDisconnect: () => {
-      console.log("❌ WebSocket disconnected");
-    },
-    onMessage: (message) => {
-      console.log("📨 Received WebSocket message:", message);
-      
-      // Handle the actual backend message format
-      // Backend sends: { event: 'incident.new', incident_id: '...', type: 'medical', ... }
-      const messageData = message as any;
-      
-      if (messageData.event === "incident.new") {
-        // New incident created - map backend fields to frontend Incident type
-        const newIncident: Incident = {
-          // Spread first to get all fields
-          ...messageData,
-          // Then override with mapped fields
-          id: messageData.incident_id || messageData.id,
-          category: messageData.type || messageData.category,
-          latitude: messageData.location?.latitude || messageData.latitude,
-          longitude: messageData.location?.longitude || messageData.longitude,
-          address_line: messageData.location?.address || messageData.address_line,
-          notes: messageData.description || messageData.notes,
-          created_at: messageData.created_at || new Date().toISOString(),
-        };
-        
-        // Check if incident already exists to prevent duplicates
-        setIncidents(prev => {
-          const exists = prev.some(i => i.id === newIncident.id);
-          if (exists) {
-            console.log("Incident already exists, skipping duplicate:", newIncident.id);
-            return prev;
-          }
-          return [newIncident, ...prev];
-        });
-        
-        // Show toast notification only once per incident
-        if (!notifiedIncidentsRef.current.has(newIncident.id)) {
-          notifiedIncidentsRef.current.add(newIncident.id);
-          
-          success(
-            "🚨 New Incident",
-            `${newIncident.category?.toUpperCase() || 'Emergency'} incident reported`
-          );
-          
-          // Play notification sound (optional)
-          if (typeof window !== "undefined" && "Audio" in window) {
-            try {
-              const audio = new Audio("/notification.mp3");
-              audio.play().catch(() => console.log("Could not play notification sound"));
-            } catch (e) {
-              console.log("Audio not available");
-            }
-          }
-        }
-      } else if (messageData.event === "incident.update" || messageData.event === "incident.status_changed") {
-        // Incident updated - map backend fields to frontend Incident type
-        const updatedIncident: Incident = {
-          // Spread first to get all fields
-          ...messageData,
-          // Then override with mapped fields
-          id: messageData.incident_id || messageData.id,
-          category: messageData.type || messageData.category,
-          latitude: messageData.location?.latitude || messageData.latitude,
-          longitude: messageData.location?.longitude || messageData.longitude,
-          address_line: messageData.location?.address || messageData.address_line,
-          notes: messageData.description || messageData.notes,
-          created_at: messageData.created_at || new Date().toISOString(),
-        };
-        
-        setIncidents(prev => prev.map(i => i.id === updatedIncident.id ? updatedIncident : i));
-        
-        // Update detail view if this incident is currently selected
-        if (selected?.id === updatedIncident.id) {
-          setDetail(updatedIncident);
-          setSelected(updatedIncident);
-        }
-        
-        // Show toast notification
-        info(
-          "📝 Incident Updated",
-          `Status changed to ${updatedIncident.status?.toUpperCase() || 'UPDATED'}`
-        );
-      }
-      // Legacy format support (in case backend changes)
-      else if (message.type === "incident_created") {
-        const newIncident = message.incident as Incident;
-        setIncidents(prev => [newIncident, ...prev]);
-        success(
-          "🚨 New Incident",
-          `${newIncident.category?.toUpperCase() || 'Emergency'} incident reported`
-        );
-      } else if (message.type === "incident_updated" || message.type === "incident_status_changed") {
-        const updatedIncident = message.incident as Incident;
-        setIncidents(prev => prev.map(i => i.id === updatedIncident.id ? updatedIncident : i));
-        
-        if (selected?.id === updatedIncident.id) {
-          setDetail(updatedIncident);
-          setSelected(updatedIncident);
-        }
-        
-        info(
-          "📝 Incident Updated",
-          `Status changed to ${updatedIncident.status?.toUpperCase() || 'UPDATED'}`
-        );
-      }
-    },
-    autoReconnect: true,
-    reconnectInterval: 5000,
-  });
-
-  async function fetchIncidents() {
-    setLoading(true);
-    setError(false);
-    const res = await incidentsAPI.list();
-    if (res === null) {
-      setError(true);
-    } else {
-      setIncidents(res.data ?? []);
-    }
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    if (checking) return;
-    fetchIncidents();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checking]);
 
   function openDetail(incident: Incident) {
     setSelected(incident);
@@ -928,7 +790,7 @@ export default function IncidentsPage() {
   if (checking) return null;
   if (loading)  return <PageSkeleton />;
 
-  if (error) {
+  if (fetchError) {
     return (
       <div className="flex h-screen overflow-hidden">
         <Sidebar role="operator" />
@@ -937,40 +799,28 @@ export default function IncidentsPage() {
             <Siren className="h-7 w-7" style={{ color: "var(--primary)" }} />
             <h1 className="text-2xl font-bold">Incidents</h1>
           </div>
-          <ErrorBanner onRetry={fetchIncidents} />
+          <ErrorBanner onRetry={refresh} />
         </main>
       </div>
     );
   }
 
   return (
-    <>
-      <ToastContainer>
-        {toasts.map((toast) => (
-          <Toast
-            key={toast.id}
-            {...toast}
-            onClose={() => dismiss(toast.id)}
-          />
-        ))}
-      </ToastContainer>
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar role="operator" />
+      <main className="flex-1 overflow-y-auto bg-background p-6">
 
-      <div className="flex h-screen overflow-hidden">
-        <Sidebar role="operator" />
-        <main className="flex-1 overflow-y-auto bg-background p-6">
-
-          {/* ── Page header ── */}
-          <div className="mb-6 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl"
-                style={{ backgroundColor: "color-mix(in oklch, var(--primary) 12%, transparent)", color: "var(--primary)" }}>
-                <Siren className="h-5 w-5" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">Incidents</h1>
+        {/* Page header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl"
+              style={{ backgroundColor: "color-mix(in oklch, var(--primary) 12%, transparent)", color: "var(--primary)" }}>
+              <Siren className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Incidents</h1>
               <div className="flex items-center gap-2">
-                <p className="text-sm text-muted-foreground">{incidents.length} total incidents</p>
-                {/* WebSocket connection indicator */}
+                <p className="text-sm text-muted-foreground">{incidents.length} total</p>
                 <span className="flex items-center gap-1 text-xs">
                   {isConnected ? (
                     <>
@@ -984,28 +834,16 @@ export default function IncidentsPage() {
                     </>
                   )}
                 </span>
-                {/* Manual refresh button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={fetchIncidents}
-                  className="h-6 px-2 text-xs"
-                  title="Refresh incidents"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                </Button>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={fetchIncidents} className="gap-1.5 rounded-lg">
+            <Button variant="outline" size="sm" onClick={refresh} className="gap-1.5 rounded-lg">
               <RefreshCw className="h-3.5 w-3.5" />
               Refresh
             </Button>
-            {/* View toggle */}
-            <div className="flex items-center rounded-xl p-1 gap-0.5"
-              style={{ backgroundColor: "var(--muted)" }}>
+            <div className="flex items-center rounded-xl p-1 gap-0.5" style={{ backgroundColor: "var(--muted)" }}>
               {(["list", "map"] as const).map(v => (
                 <button key={v} onClick={() => setView(v)}
                   className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all"
@@ -1020,34 +858,9 @@ export default function IncidentsPage() {
           </div>
         </div>
 
-        {/* Real-time notification banner */}
-        {notification.show && (
-          <div className="mb-4 animate-in slide-in-from-top-2 duration-300">
-            <div className="flex items-center gap-3 rounded-xl border px-4 py-3"
-              style={{
-                backgroundColor: notification.type === "new" ? "#ef444408" : "color-mix(in oklch, var(--chart-4) 8%, transparent)",
-                borderColor: notification.type === "new" ? "#ef444433" : "color-mix(in oklch, var(--chart-4) 30%, transparent)",
-              }}>
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                style={{
-                  backgroundColor: notification.type === "new" ? "#ef444415" : "color-mix(in oklch, var(--chart-4) 15%, transparent)",
-                  color: notification.type === "new" ? "#ef4444" : "var(--chart-4)",
-                }}>
-                {notification.type === "new" ? <Siren className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
-              </div>
-              <p className="flex-1 text-sm font-medium">{notification.message}</p>
-              <button onClick={() => setNotification(prev => ({ ...prev, show: false }))}
-                className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Stat cards ── */}
         <StatCards incidents={incidents} />
 
-        {/* ── MAP VIEW ── */}
+        {/* Map view */}
         {view === "map" && (
           <div className="overflow-hidden rounded-2xl border shadow-sm"
             style={{ height: "calc(100vh - 260px)", borderColor: "var(--border)" }}>
@@ -1055,10 +868,9 @@ export default function IncidentsPage() {
           </div>
         )}
 
-        {/* ── LIST VIEW ── */}
+        {/* List view */}
         {view === "list" && (
           <div className="grid grid-cols-12 gap-4">
-            {/* Left column - List */}
             <div className={selected ? "col-span-7" : "col-span-12"}>
 
               {/* Filter bar */}
@@ -1068,7 +880,6 @@ export default function IncidentsPage() {
                     style={{ backgroundColor: "var(--muted)" }}>
                     <Filter className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
-
                   <Select value={categoryFilter} onValueChange={v => setCategoryFilter(v as FilterCategory)}>
                     <SelectTrigger className="h-8 w-36 rounded-lg text-xs">
                       <SelectValue placeholder="Category" />
@@ -1081,7 +892,6 @@ export default function IncidentsPage() {
                       ))}
                     </SelectContent>
                   </Select>
-
                   <Select value={statusFilter} onValueChange={v => setStatusFilter(v as FilterStatus)}>
                     <SelectTrigger className="h-8 w-40 rounded-lg text-xs">
                       <SelectValue placeholder="Status" />
@@ -1094,21 +904,19 @@ export default function IncidentsPage() {
                       ))}
                     </SelectContent>
                   </Select>
-
                   {isFiltered && (
                     <button onClick={() => { setCategoryFilter("all"); setStatusFilter("all"); }}
                       className="rounded-lg px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                       Clear filters
                     </button>
                   )}
-
                   <span className="ml-auto text-xs text-muted-foreground">
                     {filtered.length} result{filtered.length !== 1 ? "s" : ""}
                   </span>
                 </CardContent>
               </Card>
 
-              {/* Table */}
+              {/* Incident table */}
               <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
                 <CardHeader className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
                   <CardTitle className="text-base">Incident List</CardTitle>
@@ -1125,9 +933,7 @@ export default function IncidentsPage() {
                           <TableHead className="text-xs font-semibold uppercase tracking-wide">Station</TableHead>
                           <TableHead className="text-xs font-semibold uppercase tracking-wide">Status</TableHead>
                           <TableHead className="text-xs font-semibold uppercase tracking-wide">
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />Time
-                            </span>
+                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Time</span>
                           </TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1142,9 +948,7 @@ export default function IncidentsPage() {
                                 backgroundColor: isSelected ? "var(--muted)" : isRouted ? "#ef444406" : undefined,
                                 borderLeft: isRouted ? "3px solid #ef4444" : "3px solid transparent",
                               }}>
-                              <TableCell className="py-3.5">
-                                <CategoryBadge category={incident.category} />
-                              </TableCell>
+                              <TableCell className="py-3.5"><CategoryBadge category={incident.category} /></TableCell>
                               <TableCell className="py-3.5">
                                 <p className="text-sm font-medium">{incident.reporter?.full_name ?? "—"}</p>
                                 {incident.reporter?.phone && (
@@ -1154,9 +958,7 @@ export default function IncidentsPage() {
                               <TableCell className="py-3.5 text-sm text-muted-foreground">
                                 {incident.assigned_station?.name ?? "—"}
                               </TableCell>
-                              <TableCell className="py-3.5">
-                                <StatusBadge status={incident.status} />
-                              </TableCell>
+                              <TableCell className="py-3.5"><StatusBadge status={incident.status} /></TableCell>
                               <TableCell className="py-3.5 font-mono text-xs text-muted-foreground">
                                 {formatTime(incident.created_at)}
                               </TableCell>
@@ -1170,10 +972,11 @@ export default function IncidentsPage() {
               </Card>
             </div>
 
-            {/* Right column - Detail Panel */}
+            {/* Detail panel */}
             {selected && (
               <div className="col-span-5">
-                <Card className="border-0 shadow-sm rounded-xl overflow-hidden sticky top-0" style={{ maxHeight: "calc(100vh - 180px)" }}>
+                <Card className="border-0 shadow-sm rounded-xl overflow-hidden sticky top-0"
+                  style={{ maxHeight: "calc(100vh - 180px)" }}>
                   <IncidentDetailPanel
                     incident={selected} detail={detail} loadingDetail={loadingDetail}
                     onClose={closeDetail} onStatusUpdate={handleStatusUpdate}
@@ -1185,8 +988,14 @@ export default function IncidentsPage() {
         )}
 
       </main>
-      </div>
-    </>
+    </div>
   );
 }
 
+export default function IncidentsPage() {
+  return (
+    <IncidentsErrorBoundary>
+      <IncidentsPageInner />
+    </IncidentsErrorBoundary>
+  );
+}

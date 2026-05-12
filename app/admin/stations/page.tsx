@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Toast, ToastContainer } from "@/components/ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -61,7 +60,7 @@ const emptyForm = {
 };
 
 export default function StationsPage() {
-  const { toasts, success, error, dismiss } = useToast();
+  const { success, error } = useToast();
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -149,16 +148,6 @@ export default function StationsPage() {
 
   return (
     <>
-      <ToastContainer>
-        {toasts.map((toast) => (
-          <Toast
-            key={toast.id}
-            {...toast}
-            onClose={() => dismiss(toast.id)}
-          />
-        ))}
-      </ToastContainer>
-
       <div className="flex h-screen overflow-hidden">
         <Sidebar role="admin" />
 

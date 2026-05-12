@@ -1,214 +1,293 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getAccessToken } from "./auth";
 
-// WebSocket base URL - always use the production endpoint
-const WS_BASE_URL = "wss://eras-api.onrender.com";
+// Resolved at build time; falls back to the known production host.
+// Set NEXT_PUBLIC_WS_URL in .env.local for dev / staging overrides.
+const WS_BASE_URL =
+  process.env.NEXT_PUBLIC_WS_URL ?? "wss://eras-api.onrender.com";
 
-export type WebSocketMessage = {
-  type: "incident_created" | "incident_updated" | "incident_status_changed" | "station_updated" | "operator_updated" | "ping" | "pong";
-  data?: unknown;
-  incident?: unknown;
-  station?: unknown;
-  operator?: unknown;
-  message?: string;
-  timestamp?: string;
+// Client-side keepalive: send a ping every 30 s to prevent proxy idle-timeouts.
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
+// Only emit debug logs in development builds.
+const devLog =
+  process.env.NODE_ENV === "development"
+    ? (...args: unknown[]) => console.log("[WS]", ...args)
+    : () => {};
+
+// ── Backend WebSocket message shapes ─────────────────────────────────────────
+//
+// New (real) format:  { event: "incident.new" | "incident.update" | ..., ...payload }
+// Legacy format:      { type: "incident_created" | ..., incident: {...} }
+// Housekeeping:       { type: "ping" } / { type: "pong" }
+
+export type BackendIncidentPayload = {
+  incident_id?: string;
+  id?: string;
+  /** category on the wire is called "type" */
+  type?: string;
+  category?: string;
+  status?: string;
+  location?: {
+    latitude?: number | string | null;
+    longitude?: number | string | null;
+    address?: string;
+  };
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  address_line?: string;
+  description?: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+  reporter?: { id: string; full_name: string; phone: string } | null;
+  assigned_station?: unknown;
+  confidence?: number | null;
+  amharic_text?: string;
+  english_text?: string;
+  audio_url?: string;
 };
 
-type WebSocketHookOptions = {
-  onMessage?: (message: WebSocketMessage) => void;
+export type BackendWSMessage =
+  | ({ event: "incident.new" } & BackendIncidentPayload)
+  | ({ event: "incident.update" | "incident.status_changed" } & BackendIncidentPayload)
+  | { event: "ping" | "pong" }
+  | { type: "incident_created"; incident: unknown }
+  | { type: "incident_updated" | "incident_status_changed"; incident: unknown }
+  | { type: "ping" | "pong" };
+
+// ── Hook options / return ─────────────────────────────────────────────────────
+
+type WebSocketHookOptions<T> = {
+  onMessage?: (message: T) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
   onError?: (error: Event) => void;
   autoReconnect?: boolean;
   reconnectInterval?: number;
-  enabled?: boolean; // Allow disabling the connection
+  maxReconnectAttempts?: number;
+  enabled?: boolean;
 };
 
-export function useWebSocket(endpoint: string, options: WebSocketHookOptions = {}) {
+type WebSocketHookReturn<T> = {
+  isConnected: boolean;
+  lastMessage: T | null;
+  connectionError: string | null;
+  sendMessage: (message: unknown) => void;
+  reconnect: () => void;
+  disconnect: () => void;
+};
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
+
+export function useWebSocket<T = Record<string, unknown>>(
+  endpoint: string,
+  options: WebSocketHookOptions<T> = {}
+): WebSocketHookReturn<T> {
   const {
-    onMessage,
-    onConnect,
-    onDisconnect,
-    onError,
     autoReconnect = true,
-    reconnectInterval = 5000,
+    reconnectInterval = 5_000,
+    maxReconnectAttempts = 10,
     enabled = true,
   } = options;
 
   const [isConnected, setIsConnected] = useState(false);
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
+  const [lastMessage, setLastMessage] = useState<T | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  
-  // Use refs for all mutable values and callbacks
+
+  // All mutable values in refs — no stale-closure risk inside WS event handlers.
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldConnectRef = useRef(true);
   const reconnectAttemptsRef = useRef(0);
   const isConnectingRef = useRef(false);
   const mountedRef = useRef(false);
-  const maxReconnectAttempts = 10;
-  
-  // Store callbacks in refs to avoid recreating connect function
-  const onMessageRef = useRef(onMessage);
-  const onConnectRef = useRef(onConnect);
-  const onDisconnectRef = useRef(onDisconnect);
-  const onErrorRef = useRef(onError);
-  const autoReconnectRef = useRef(autoReconnect);
-  const reconnectIntervalRef = useRef(reconnectInterval);
-  
-  // Update refs when callbacks change
-  useEffect(() => {
-    onMessageRef.current = onMessage;
-    onConnectRef.current = onConnect;
-    onDisconnectRef.current = onDisconnect;
-    onErrorRef.current = onError;
-    autoReconnectRef.current = autoReconnect;
-    reconnectIntervalRef.current = reconnectInterval;
-  }, [onMessage, onConnect, onDisconnect, onError, autoReconnect, reconnectInterval]);
+
+  // "Latest ref" pattern: sync options into a ref every render so WS callbacks
+  // always read the freshest version without needing to be recreated.
+  const optsRef = useRef(options);
+  optsRef.current = options;
+
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+
+  const endpointRef = useRef(endpoint);
+  endpointRef.current = endpoint;
+
+  // ── Heartbeat ──────────────────────────────────────────────────────────────
+
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+  }, []);
+
+  const startHeartbeat = useCallback(() => {
+    stopHeartbeat();
+    heartbeatRef.current = setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "ping" }));
+        devLog("heartbeat ping");
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+  }, [stopHeartbeat]);
+
+  // ── Core connect ──────────────────────────────────────────────────────────
 
   const connect = useCallback(() => {
     if (typeof window === "undefined") return;
-    if (!enabled) return;
     if (!mountedRef.current) return;
-    
-    // Prevent multiple simultaneous connection attempts
-    if (isConnectingRef.current) {
-      return;
-    }
-    
-    // Check if already connected
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
-    
-    // Close any existing connection before creating a new one
+    if (!enabledRef.current) return;
+    if (isConnectingRef.current) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    // Remove stale connection.
     if (wsRef.current) {
-      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      wsRef.current.onopen = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+      wsRef.current = null;
     }
 
     const token = getAccessToken();
     if (!token) {
-      console.warn("No access token available for WebSocket connection");
       setConnectionError("Authentication required");
       return;
     }
 
     try {
       isConnectingRef.current = true;
-      
-      // Construct WebSocket URL with token
-      let wsUrl: string;
-      if (endpoint.startsWith("ws://") || endpoint.startsWith("wss://")) {
-        wsUrl = `${endpoint}?token=${token}`;
-      } else {
-        wsUrl = `${WS_BASE_URL}${endpoint}?token=${token}`;
-      }
-      
-      // Only log connection attempt on first try
-      if (reconnectAttemptsRef.current === 0) {
-        console.log("Connecting to WebSocket:", wsUrl.replace(token, "***"));
-      }
+
+      const ep = endpointRef.current;
+      // NOTE: The backend authenticates via ?token= query param because browsers
+      // cannot set custom headers on WebSocket connections. Migrating to
+      // first-message auth requires a coordinated backend change.
+      const wsUrl = ep.startsWith("ws://") || ep.startsWith("wss://")
+        ? `${ep}?token=${token}`
+        : `${WS_BASE_URL}${ep}?token=${token}`;
+
+      devLog("connecting (attempt", reconnectAttemptsRef.current + 1, ")");
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log("✅ WebSocket connected");
+        devLog("connected");
         setIsConnected(true);
         setConnectionError(null);
         reconnectAttemptsRef.current = 0;
         isConnectingRef.current = false;
-        onConnectRef.current?.();
+        startHeartbeat();
+        optsRef.current.onConnect?.();
       };
 
-      ws.onmessage = (event) => {
+      ws.onmessage = (event: MessageEvent) => {
         try {
-          const message = JSON.parse(event.data) as WebSocketMessage;
-          console.log("📨 WebSocket message received:", message.type, message);
-          setLastMessage(message);
-          onMessageRef.current?.(message);
-        } catch (error) {
-          console.error("Failed to parse WebSocket message:", error);
+          const msg = JSON.parse(event.data as string) as T;
+          // Silently swallow housekeeping pong frames.
+          const raw = msg as Record<string, unknown>;
+          if (raw.type === "pong" || raw.event === "pong") return;
+          devLog("message:", raw.type ?? (raw as Record<string, unknown>).event);
+          setLastMessage(msg);
+          optsRef.current.onMessage?.(msg);
+        } catch {
+          // Non-JSON frames — ignore silently.
         }
       };
 
-      ws.onerror = (error) => {
+      ws.onerror = (error: Event) => {
         isConnectingRef.current = false;
-        onErrorRef.current?.(error);
+        optsRef.current.onError?.(error);
       };
 
       ws.onclose = () => {
         setIsConnected(false);
         isConnectingRef.current = false;
         wsRef.current = null;
-        onDisconnectRef.current?.();
+        stopHeartbeat();
+        optsRef.current.onDisconnect?.();
 
-        // Auto-reconnect if enabled and should still be connected
-        if (autoReconnectRef.current && shouldConnectRef.current && enabled) {
+        const {
+          autoReconnect: ar = true,
+          reconnectInterval: ri = 5_000,
+          maxReconnectAttempts: max = 10,
+        } = optsRef.current;
+
+        if (ar && shouldConnectRef.current && enabledRef.current) {
           reconnectAttemptsRef.current += 1;
-          
-          if (reconnectAttemptsRef.current <= maxReconnectAttempts) {
-            const delay = Math.min(reconnectIntervalRef.current * reconnectAttemptsRef.current, 30000);
-            setConnectionError(`Reconnecting... (attempt ${reconnectAttemptsRef.current})`);
-            
-            reconnectTimeoutRef.current = setTimeout(() => {
-              connect();
-            }, delay);
+          const attempts = reconnectAttemptsRef.current;
+
+          if (attempts <= max) {
+            // Exponential back-off with jitter to prevent thundering herd:
+            //   delay = min(interval × 2^(attempt-1), 30 s) + random(0–1 s)
+            const base = Math.min(ri * Math.pow(2, attempts - 1), 30_000);
+            const delay = base + Math.random() * 1_000;
+            setConnectionError(`Reconnecting… (${attempts}/${max})`);
+            devLog(`reconnect in ${Math.round(delay / 1000)}s`);
+            reconnectTimeoutRef.current = setTimeout(() => connect(), delay);
           } else {
-            setConnectionError("WebSocket unavailable");
+            setConnectionError("Connection unavailable. Please refresh the page.");
           }
         }
       };
-    } catch (error) {
-      console.error("Failed to create WebSocket connection:", error);
+    } catch (err) {
       isConnectingRef.current = false;
       setConnectionError("Failed to connect");
+      devLog("connection error:", err);
     }
-  }, [endpoint, enabled]); // Only endpoint and enabled as dependencies
+  }, [startHeartbeat, stopHeartbeat]);
+  // `connect` is intentionally stable (no option deps) — option changes are
+  // picked up via optsRef inside the event handlers.
+
+  // ── Disconnect ────────────────────────────────────────────────────────────
 
   const disconnect = useCallback(() => {
     shouldConnectRef.current = false;
     reconnectAttemptsRef.current = 0;
     isConnectingRef.current = false;
-    
+    stopHeartbeat();
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    
+
     if (wsRef.current) {
-      // Remove event listeners to prevent memory leaks
       wsRef.current.onopen = null;
       wsRef.current.onmessage = null;
       wsRef.current.onerror = null;
       wsRef.current.onclose = null;
-      
-      // Close the connection if it's open or connecting
-      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+      if (
+        wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING
+      ) {
         wsRef.current.close();
       }
       wsRef.current = null;
     }
-    
+
     setIsConnected(false);
     setConnectionError(null);
-  }, []);
+  }, [stopHeartbeat]);
+
+  // ── Send ──────────────────────────────────────────────────────────────────
 
   const sendMessage = useCallback((message: unknown) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
-      console.log("📤 WebSocket message sent:", message);
-    } else {
-      console.warn("WebSocket is not connected. Cannot send message.");
+      devLog("sent:", message);
     }
   }, []);
 
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+
   useEffect(() => {
     mountedRef.current = true;
-    
+
     if (!enabled) {
       disconnect();
       return;
@@ -221,15 +300,27 @@ export function useWebSocket(endpoint: string, options: WebSocketHookOptions = {
       mountedRef.current = false;
       disconnect();
     };
+    // Reconnect only when the `enabled` flag toggles.
+    // `connect` / `disconnect` are stable callbacks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled]); // Only depend on enabled, not connect/disconnect
+  }, [enabled]);
 
-  return {
-    isConnected,
-    lastMessage,
-    connectionError,
-    sendMessage,
-    reconnect: connect,
-    disconnect,
-  };
+  // Reconnect immediately when the user returns to a backgrounded tab.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!enabledRef.current) return;
+      const ws = wsRef.current;
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        reconnectAttemptsRef.current = 0;
+        shouldConnectRef.current = true;
+        connect();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [connect]);
+
+  return { isConnected, lastMessage, connectionError, sendMessage, reconnect: connect, disconnect };
 }
