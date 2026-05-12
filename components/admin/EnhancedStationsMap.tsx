@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
-import { Search, Filter, X, Building2, Activity, WifiOff } from "lucide-react";
+import { Search, Filter, X, Building2, Activity, WifiOff, Satellite, Map as MapIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,12 +22,14 @@ export default function EnhancedStationsMap({ stations }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersMapRef = useRef<Map<string, any>>(new Map());
+  const tileLayerRef = useRef<any>(null);
   
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<string[]>(["police", "medical", "fire"]);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [isSatellite, setIsSatellite] = useState(false);
 
   // Filter stations
   const filteredStations = useMemo(() => {
@@ -58,6 +60,39 @@ export default function EnhancedStationsMap({ stations }: Props) {
     setSelectedTypes(prev =>
       prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
     );
+  };
+
+  // Toggle satellite view
+  const toggleSatellite = () => {
+    if (!mapRef.current || !tileLayerRef.current) return;
+
+    import("leaflet").then((L) => {
+      const Leaflet = L.default || L;
+      
+      // Remove current tile layer
+      if (tileLayerRef.current) {
+        mapRef.current.removeLayer(tileLayerRef.current);
+      }
+
+      // Add new tile layer based on view type
+      let newTileLayer;
+      if (!isSatellite) {
+        // Switch to satellite view
+        newTileLayer = Leaflet.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+          attribution: '© Esri, Maxar, Earthstar Geographics',
+          maxZoom: 19,
+        }).addTo(mapRef.current);
+      } else {
+        // Switch to vector view
+        newTileLayer = Leaflet.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+          attribution: '© OpenStreetMap, © CARTO',
+          maxZoom: 19,
+        }).addTo(mapRef.current);
+      }
+
+      tileLayerRef.current = newTileLayer;
+      setIsSatellite(!isSatellite);
+    });
   };
 
   // Zoom to station
@@ -97,12 +132,13 @@ export default function EnhancedStationsMap({ stations }: Props) {
           preferCanvas: true,
         });
 
-        // Add tile layer
-        Leaflet.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        // Add default tile layer (vector map)
+        const tileLayer = Leaflet.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
           attribution: '© OpenStreetMap, © CARTO',
           maxZoom: 19,
         }).addTo(map);
 
+        tileLayerRef.current = tileLayer;
         mapRef.current = map;
         setMapLoaded(true);
       } catch (err) {
@@ -367,6 +403,26 @@ export default function EnhancedStationsMap({ stations }: Props) {
             </div>
           )}
         </div>
+
+        {/* Satellite Toggle Button */}
+        <Button
+          onClick={toggleSatellite}
+          className="absolute bottom-4 right-4 z-[1000] shadow-lg bg-white/90 backdrop-blur-lg hover:bg-white border border-gray-200"
+          size="sm"
+          variant="outline"
+        >
+          {isSatellite ? (
+            <>
+              <MapIcon className="h-4 w-4 mr-2" />
+              <span className="text-gray-700">Map View</span>
+            </>
+          ) : (
+            <>
+              <Satellite className="h-4 w-4 mr-2" />
+              <span className="text-gray-700">Satellite</span>
+            </>
+          )}
+        </Button>
 
         {/* Map */}
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />

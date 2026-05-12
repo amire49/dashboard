@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import {
   Siren, AlertTriangle, CheckCircle, Clock, Filter,
@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Toast, ToastContainer } from "@/components/ui/toast";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -22,6 +23,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import { incidentsAPI } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { useToast } from "@/lib/useToast";
 import type { Incident } from "@/types";
 
 const IncidentMap = dynamic(() => import("@/components/incidents/IncidentMap"), {
@@ -55,34 +57,69 @@ function AudioPlayer({ url }: { url: string }) {
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
+  const [audioBlob, setAudioBlob] = useState<string | null>(null);
 
   useEffect(() => {
-    const audio = new Audio(url);
-    audio.preload = "metadata";
-    
-    audio.addEventListener("loadedmetadata", () => {
-      setDuration(audio.duration);
-    });
-    
-    audio.addEventListener("timeupdate", () => {
-      setCurrentTime(audio.currentTime);
-    });
-    
-    audio.addEventListener("ended", () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    });
-    
-    audio.addEventListener("error", () => {
-      // Silently handle audio loading errors - show user-friendly message instead
-      setError("Unable to load audio file. Please check the file format or URL.");
-    });
-    
-    setAudioRef(audio);
+    // Fetch audio with authentication
+    const fetchAudio = async () => {
+      try {
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+          setError("Authentication required to play audio");
+          return;
+        }
+
+        const response = await fetch(url, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load audio: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        setAudioBlob(blobUrl);
+
+        const audio = new Audio(blobUrl);
+        audio.preload = "metadata";
+        
+        audio.addEventListener("loadedmetadata", () => {
+          setDuration(audio.duration);
+        });
+        
+        audio.addEventListener("timeupdate", () => {
+          setCurrentTime(audio.currentTime);
+        });
+        
+        audio.addEventListener("ended", () => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        });
+        
+        audio.addEventListener("error", () => {
+          setError("Unable to play audio file. Please check the file format.");
+        });
+        
+        setAudioRef(audio);
+      } catch (err) {
+        console.error("Audio fetch error:", err);
+        setError("Unable to load audio file. Please try again later.");
+      }
+    };
+
+    fetchAudio();
     
     return () => {
-      audio.pause();
-      audio.src = "";
+      if (audioRef) {
+        audioRef.pause();
+        audioRef.src = "";
+      }
+      if (audioBlob) {
+        URL.revokeObjectURL(audioBlob);
+      }
     };
   }, [url]);
 
@@ -708,7 +745,9 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
 
 export default function IncidentsPage() {
   const { checking } = useAuth("operator");
+  const { toasts, success, info, dismiss } = useToast();
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const notifiedIncidentsRef = useRef<Set<string>>(new Set()); // Track notified incidents
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(false);
   const [view, setView]           = useState<"list" | "map">("list");
@@ -722,39 +761,81 @@ export default function IncidentsPage() {
   });
 
   // WebSocket connection for real-time updates
-  // NOTE: Set enabled to false if backend WebSocket is not ready yet
-  const { isConnected, lastMessage, connectionError } = useWebSocket("/ws/operator/incidents/", {
-    enabled: false, // TODO: Set to true once backend WebSocket endpoint is confirmed
+  const { isConnected, lastMessage, connectionError } = useWebSocket("/ws/operators/incidents/", {
+    enabled: true, // Enabled - WebSocket endpoint confirmed
+    onConnect: () => {
+      console.log("✅ WebSocket connected - Real-time updates enabled");
+      info("🔗 Connected", "Real-time updates enabled");
+    },
+    onDisconnect: () => {
+      console.log("❌ WebSocket disconnected");
+    },
     onMessage: (message) => {
-      console.log("Received WebSocket message:", message);
+      console.log("📨 Received WebSocket message:", message);
       
-      if (message.type === "incident_created") {
-        // New incident created
-        const newIncident = message.incident as Incident;
-        setIncidents(prev => [newIncident, ...prev]);
+      // Handle the actual backend message format
+      // Backend sends: { event: 'incident.new', incident_id: '...', type: 'medical', ... }
+      const messageData = message as any;
+      
+      if (messageData.event === "incident.new") {
+        // New incident created - map backend fields to frontend Incident type
+        const newIncident: Incident = {
+          // Spread first to get all fields
+          ...messageData,
+          // Then override with mapped fields
+          id: messageData.incident_id || messageData.id,
+          category: messageData.type || messageData.category,
+          latitude: messageData.location?.latitude || messageData.latitude,
+          longitude: messageData.location?.longitude || messageData.longitude,
+          address_line: messageData.location?.address || messageData.address_line,
+          notes: messageData.description || messageData.notes,
+          created_at: messageData.created_at || new Date().toISOString(),
+        };
         
-        // Show notification
-        setNotification({
-          show: true,
-          message: `New ${newIncident.category} incident reported!`,
-          type: "new"
+        // Check if incident already exists to prevent duplicates
+        setIncidents(prev => {
+          const exists = prev.some(i => i.id === newIncident.id);
+          if (exists) {
+            console.log("Incident already exists, skipping duplicate:", newIncident.id);
+            return prev;
+          }
+          return [newIncident, ...prev];
         });
         
-        // Play notification sound (optional)
-        if (typeof window !== "undefined" && "Audio" in window) {
-          try {
-            const audio = new Audio("/notification.mp3");
-            audio.play().catch(() => console.log("Could not play notification sound"));
-          } catch (e) {
-            console.log("Audio not available");
+        // Show toast notification only once per incident
+        if (!notifiedIncidentsRef.current.has(newIncident.id)) {
+          notifiedIncidentsRef.current.add(newIncident.id);
+          
+          success(
+            "🚨 New Incident",
+            `${newIncident.category?.toUpperCase() || 'Emergency'} incident reported`
+          );
+          
+          // Play notification sound (optional)
+          if (typeof window !== "undefined" && "Audio" in window) {
+            try {
+              const audio = new Audio("/notification.mp3");
+              audio.play().catch(() => console.log("Could not play notification sound"));
+            } catch (e) {
+              console.log("Audio not available");
+            }
           }
         }
+      } else if (messageData.event === "incident.update" || messageData.event === "incident.status_changed") {
+        // Incident updated - map backend fields to frontend Incident type
+        const updatedIncident: Incident = {
+          // Spread first to get all fields
+          ...messageData,
+          // Then override with mapped fields
+          id: messageData.incident_id || messageData.id,
+          category: messageData.type || messageData.category,
+          latitude: messageData.location?.latitude || messageData.latitude,
+          longitude: messageData.location?.longitude || messageData.longitude,
+          address_line: messageData.location?.address || messageData.address_line,
+          notes: messageData.description || messageData.notes,
+          created_at: messageData.created_at || new Date().toISOString(),
+        };
         
-        // Auto-hide notification after 5 seconds
-        setTimeout(() => setNotification(prev => ({ ...prev, show: false })), 5000);
-      } else if (message.type === "incident_updated" || message.type === "incident_status_changed") {
-        // Incident updated
-        const updatedIncident = message.incident as Incident;
         setIncidents(prev => prev.map(i => i.id === updatedIncident.id ? updatedIncident : i));
         
         // Update detail view if this incident is currently selected
@@ -763,21 +844,34 @@ export default function IncidentsPage() {
           setSelected(updatedIncident);
         }
         
-        // Show notification
-        setNotification({
-          show: true,
-          message: `Incident status updated to ${updatedIncident.status}`,
-          type: "update"
-        });
-        
-        setTimeout(() => setNotification(prev => ({ ...prev, show: false })), 3000);
+        // Show toast notification
+        info(
+          "📝 Incident Updated",
+          `Status changed to ${updatedIncident.status?.toUpperCase() || 'UPDATED'}`
+        );
       }
-    },
-    onConnect: () => {
-      console.log("Connected to incident notifications");
-    },
-    onDisconnect: () => {
-      console.log("Disconnected from incident notifications");
+      // Legacy format support (in case backend changes)
+      else if (message.type === "incident_created") {
+        const newIncident = message.incident as Incident;
+        setIncidents(prev => [newIncident, ...prev]);
+        success(
+          "🚨 New Incident",
+          `${newIncident.category?.toUpperCase() || 'Emergency'} incident reported`
+        );
+      } else if (message.type === "incident_updated" || message.type === "incident_status_changed") {
+        const updatedIncident = message.incident as Incident;
+        setIncidents(prev => prev.map(i => i.id === updatedIncident.id ? updatedIncident : i));
+        
+        if (selected?.id === updatedIncident.id) {
+          setDetail(updatedIncident);
+          setSelected(updatedIncident);
+        }
+        
+        info(
+          "📝 Incident Updated",
+          `Status changed to ${updatedIncident.status?.toUpperCase() || 'UPDATED'}`
+        );
+      }
     },
     autoReconnect: true,
     reconnectInterval: 5000,
@@ -850,19 +944,30 @@ export default function IncidentsPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar role="operator" />
-      <main className="flex-1 overflow-y-auto bg-background p-6">
+    <>
+      <ToastContainer>
+        {toasts.map((toast) => (
+          <Toast
+            key={toast.id}
+            {...toast}
+            onClose={() => dismiss(toast.id)}
+          />
+        ))}
+      </ToastContainer>
 
-        {/* ── Page header ── */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl"
-              style={{ backgroundColor: "color-mix(in oklch, var(--primary) 12%, transparent)", color: "var(--primary)" }}>
-              <Siren className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Incidents</h1>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar role="operator" />
+        <main className="flex-1 overflow-y-auto bg-background p-6">
+
+          {/* ── Page header ── */}
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl"
+                style={{ backgroundColor: "color-mix(in oklch, var(--primary) 12%, transparent)", color: "var(--primary)" }}>
+                <Siren className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">Incidents</h1>
               <div className="flex items-center gap-2">
                 <p className="text-sm text-muted-foreground">{incidents.length} total incidents</p>
                 {/* WebSocket connection indicator */}
@@ -870,15 +975,25 @@ export default function IncidentsPage() {
                   {isConnected ? (
                     <>
                       <Wifi className="h-3 w-3 text-green-600" />
-                      <span className="text-green-600">Live</span>
+                      <span className="text-green-600 font-medium">Live</span>
                     </>
                   ) : (
                     <>
-                      <WifiOff className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-muted-foreground">Offline</span>
+                      <WifiOff className="h-3 w-3 text-amber-600" />
+                      <span className="text-amber-600 font-medium">Offline</span>
                     </>
                   )}
                 </span>
+                {/* Manual refresh button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={fetchIncidents}
+                  className="h-6 px-2 text-xs"
+                  title="Refresh incidents"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </Button>
               </div>
             </div>
           </div>
@@ -1070,7 +1185,8 @@ export default function IncidentsPage() {
         )}
 
       </main>
-    </div>
+      </div>
+    </>
   );
 }
 

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Toast, ToastContainer } from "@/components/ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/table";
 import Sidebar from "@/components/layout/Sidebar";
 import { stationsAPI } from "@/lib/api";
+import { useToast } from "@/lib/useToast";
 import type { Station, StationType } from "@/types";
 
 const typeBadgeStyles: Record<StationType, { backgroundColor: string; color: string }> = {
@@ -59,6 +61,7 @@ const emptyForm = {
 };
 
 export default function StationsPage() {
+  const { toasts, success, error, dismiss } = useToast();
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -106,9 +109,9 @@ export default function StationsPage() {
       setForm(emptyForm);
       setShowAddModal(false);
       await fetchStations();
-      setAlertDialog({ open: true, type: "success", message: "Station created successfully!" });
+      success("Station Created", `${form.name} has been added successfully`);
     } else {
-      setAlertDialog({ open: true, type: "error", message: "Failed to create station. Please try again." });
+      error("Creation Failed", "Failed to create station. Please try again.");
     }
     setSubmitting(false);
   }
@@ -117,15 +120,15 @@ export default function StationsPage() {
     setDeletingId(id);
     setDeleteDialog({ open: false, stationId: null, stationName: "" });
     try {
-      const success = await stationsAPI.delete(id);
-      if (success) {
+      const success_result = await stationsAPI.delete(id);
+      if (success_result) {
         setStations(prev => prev.filter(s => s.id !== id));
-        setAlertDialog({ open: true, type: "success", message: "Station deleted successfully!" });
+        success("Station Deleted", "Station has been removed successfully");
       } else {
-        setAlertDialog({ open: true, type: "error", message: "Failed to delete station. Please check your permissions or try again." });
+        error("Deletion Failed", "Failed to delete station. Please check your permissions.");
       }
     } catch {
-      setAlertDialog({ open: true, type: "error", message: "An error occurred while deleting the station." });
+      error("Error", "An error occurred while deleting the station.");
     } finally {
       setDeletingId(null);
     }
@@ -145,16 +148,27 @@ export default function StationsPage() {
   const accentColor = typeColors[form.type];
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar role="admin" />
+    <>
+      <ToastContainer>
+        {toasts.map((toast) => (
+          <Toast
+            key={toast.id}
+            {...toast}
+            onClose={() => dismiss(toast.id)}
+          />
+        ))}
+      </ToastContainer>
 
-      <main className="flex-1 overflow-y-auto bg-background p-6">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">Stations</h1>
-            <Badge variant="secondary" className="font-mono">{stations.length}</Badge>
-          </div>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar role="admin" />
+
+        <main className="flex-1 overflow-y-auto bg-background p-6">
+          {/* Header */}
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">Stations</h1>
+              <Badge variant="secondary" className="font-mono">{stations.length}</Badge>
+            </div>
           <div className="flex items-center gap-3">
             {/* Status Filter */}
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "active" | "inactive")}>
@@ -436,6 +450,7 @@ export default function StationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </>
   );
 }
