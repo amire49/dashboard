@@ -65,6 +65,10 @@ function fireBrowserNotification(title: string, body: string) {
 
 export type UseIncidentSocketOptions = {
   /**
+   * When false, skips REST fetch and WebSocket until true (e.g. wait for auth).
+   */
+  enabled?: boolean;
+  /**
    * Called whenever an existing incident is updated via WebSocket.
    * Use this to sync derived UI state (e.g. the selected / detail panel).
    */
@@ -85,6 +89,8 @@ export type UseIncidentSocketReturn = {
 export function useIncidentSocket(
   options: UseIncidentSocketOptions = {}
 ): UseIncidentSocketReturn {
+  const enabled = options.enabled ?? true;
+
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
@@ -103,9 +109,13 @@ export function useIncidentSocket(
   const optsRef = useRef(options);
   optsRef.current = options;
 
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+
   // ── REST fetch ──────────────────────────────────────────────────────────────
 
   const fetchIncidents = useCallback(async (silent = false) => {
+    if (!enabledRef.current) return;
     if (!silent) setLoading(true);
     setFetchError(false);
     const res = await incidentsAPI.list();
@@ -118,8 +128,12 @@ export function useIncidentSocket(
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      // Stay in loading state until auth is ready — avoids a one-frame empty list.
+      return;
+    }
     fetchIncidents();
-  }, [fetchIncidents]);
+  }, [enabled, fetchIncidents]);
 
   // ── WS message handler ─────────────────────────────────────────────────────
 
@@ -154,9 +168,11 @@ export function useIncidentSocket(
           msg.event === "incident.status_changed"
         ) {
           const incident = mapPayload(msg as BackendIncidentPayload);
-          setIncidents((prev) =>
-            prev.map((i) => (i.id === incident.id ? incident : i))
-          );
+          setIncidents((prev) => {
+            const idx = prev.findIndex((i) => i.id === incident.id);
+            if (idx === -1) return [incident, ...prev];
+            return prev.map((i) => (i.id === incident.id ? incident : i));
+          });
           info(
             "Incident Updated",
             `Status: ${incident.status?.toUpperCase() ?? "UPDATED"}`
@@ -190,9 +206,11 @@ export function useIncidentSocket(
           msg.type === "incident_status_changed"
         ) {
           const incident = (msg as { type: string; incident: Incident }).incident;
-          setIncidents((prev) =>
-            prev.map((i) => (i.id === incident.id ? incident : i))
-          );
+          setIncidents((prev) => {
+            const idx = prev.findIndex((i) => i.id === incident.id);
+            if (idx === -1) return [incident, ...prev];
+            return prev.map((i) => (i.id === incident.id ? incident : i));
+          });
           info(
             "Incident Updated",
             `Status: ${incident.status?.toUpperCase() ?? "UPDATED"}`
@@ -210,10 +228,12 @@ export function useIncidentSocket(
   const { isConnected, connectionError } = useWebSocket<BackendWSMessage>(
     "/ws/operators/incidents/",
     {
+      enabled,
       autoReconnect: true,
       reconnectInterval: 5_000,
 
       onConnect() {
+        if (!enabledRef.current) return;
         if (!isInitialConnectRef.current) {
           // Silently re-sync the list in case we missed messages during dropout.
           fetchIncidents(true);

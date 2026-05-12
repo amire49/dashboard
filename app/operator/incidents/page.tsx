@@ -750,6 +750,7 @@ function IncidentsPageInner() {
     isConnected,
     refresh,
   } = useIncidentSocket({
+    enabled: !checking,
     onIncidentUpdated(updated) {
       // Keep the detail panel in sync when the currently viewed incident changes.
       setSelected(prev => (prev?.id === updated.id ? { ...prev, ...updated } : prev));

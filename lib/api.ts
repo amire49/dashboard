@@ -147,9 +147,32 @@ export const stationsAPI = {
   },
 };
 
+/** Extract incident rows from common API shapes (custom `{ data }`, DRF `{ results }`, or a bare array). */
+function incidentsArrayFromListBody(body: unknown): Incident[] | null {
+  if (body === null || body === undefined) return null;
+  if (Array.isArray(body)) return body as Incident[];
+
+  if (typeof body !== "object") return null;
+  const o = body as Record<string, unknown>;
+
+  if (Array.isArray(o.data)) return o.data as Incident[];
+  if (Array.isArray(o.results)) return o.results as Incident[];
+
+  const nested = o.data;
+  if (nested && typeof nested === "object" && Array.isArray((nested as Record<string, unknown>).results)) {
+    return (nested as { results: Incident[] }).results;
+  }
+
+  return null;
+}
+
 export const incidentsAPI = {
-  list() {
-    return request<IncidentsListResponse>("/api/operator/incidents/");
+  async list(): Promise<IncidentsListResponse | null> {
+    const body = await request<unknown>("/api/operator/incidents/");
+    if (body === null) return null;
+    const data = incidentsArrayFromListBody(body);
+    if (data === null) return null;
+    return { data };
   },
 
   get(id: string) {
