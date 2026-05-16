@@ -18,8 +18,10 @@ export interface Station {
   type: StationType;
   phone: string;
   email: string;
-  latitude: number;
-  longitude: number;
+  lat?: number | string;
+  long?: number | string;
+  latitude?: number | string;
+  longitude?: number | string;
   address: string;
   city: string;
   capacity: number;
@@ -65,12 +67,57 @@ export interface OperatorDashboardData {
   recent_incidents: Incident[];
 }
 
+export type IncidentType = "fire" | "medical" | "crime" | "police" | string;
+export type IncidentStatus = "routed" | "in_progress" | "resolved" | string;
+
+export interface AssignedStation {
+  id: string;
+  name: string;
+  type: string;
+  type_display: string;
+  phone: string;
+  latitude: string;
+  longitude: string;
+  address: string;
+  city: string;
+}
+
 export interface Incident {
   id: string;
-  type: string;
-  location: string;
-  status: string;
-  time: string;
+  category: IncidentType;
+  status: IncidentStatus;
+  // reporter is a nested object
+  reporter?: {
+    id: string;
+    full_name: string;
+    phone: string;
+  } | null;
+  // location
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+  location_accuracy_m?: number | null;
+  altitude_m?: number | null;
+  address_line?: string;
+  notes?: string;
+  // AI output
+  amharic_text?: string;
+  english_text?: string;
+  confidence?: number | null;
+  service_type?: string;
+  voice_request_id?: string;
+  voice_error?: string;
+  // media
+  audio_url?: string;
+  // assignment
+  assigned_station?: AssignedStation | null;
+  distance_to_station_km?: number | null;
+  // timestamps
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface IncidentsListResponse {
+  data: Incident[];
 }
 
 export interface LoginRequest {
@@ -100,4 +147,30 @@ export interface CreateOperatorResponse extends Operator {
 
 export interface ResetPasswordResponse {
   temporary_password: string;
+}
+
+export type KycStatus = "pending" | "approved" | "rejected" | "not_submitted";
+
+export interface KycDocument {
+  id: string;
+  id_type: "national_id" | "passport" | "drivers_license" | string;
+  id_number: string;
+  image_front: string;
+  image_back: string;
+  image_selfie: string;
+  submitted_at: string;
+  reviewed_at?: string | null;
+  status: KycStatus;
+  rejection_reason?: string | null;
+}
+
+export interface Citizen {
+  id: string;
+  full_name: string;
+  phone: string;
+  email: string;
+  joined_at: string;
+  is_active: boolean;
+  kyc_status: KycStatus;
+  kyc?: KycDocument | null;
 }
