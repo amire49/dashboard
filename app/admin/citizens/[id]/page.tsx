@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Image from "next/image";
-import { ArrowLeft, User, Phone, Mail, Calendar, CreditCard, Loader2, ChevronRight } from "lucide-react";
-import Link from "next/link";
+import { ArrowLeft, User, Phone, Mail, Calendar, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Sidebar from "@/components/layout/Sidebar";
 import { citizensAPI } from "@/lib/api";
@@ -15,12 +13,6 @@ const KYC_COLORS: Record<KycStatus, { bg: string; text: string; label: string }>
   pending:       { bg: "color-mix(in oklch, var(--chart-4) 12%, transparent)", text: "var(--chart-4)",  label: "Pending" },
   rejected:      { bg: "#ef444412",                                             text: "#ef4444",         label: "Rejected" },
   not_submitted: { bg: "var(--muted)",                                          text: "var(--muted-foreground)", label: "Not Submitted" },
-};
-
-const ID_TYPE_LABELS: Record<string, string> = {
-  national_id:     "National ID",
-  passport:        "Passport",
-  drivers_license: "Driver's License",
 };
 
 function KycBadge({ status }: { status: KycStatus }) {
@@ -127,77 +119,40 @@ export default function CitizenDetailPage() {
                 <InfoRow icon={User}     label="Full Name" value={citizen.full_name} />
                 <InfoRow icon={Phone}    label="Phone"     value={citizen.phone} />
                 <InfoRow icon={Mail}     label="Email"     value={citizen.email} />
-                <InfoRow icon={Calendar} label="Joined"    value={fmt(citizen.joined_at)} />
+                <InfoRow icon={Calendar} label="Joined"    value={fmt(citizen.joined_at || citizen.created_at)} />
               </div>
             </CardContent>
           </Card>
 
-          {/* KYC section */}
+          {/* KYC Status section */}
           <div className="space-y-5 lg:col-span-2">
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">KYC Verification</CardTitle>
-                  {citizen.kyc_status === "pending" && (
-                    <Link href={`/admin/kyc/${citizen.id}`}
-                      className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors"
-                      style={{ backgroundColor: "color-mix(in oklch, var(--primary) 10%, transparent)", color: "var(--primary)" }}>
-                      Review
-                      <ChevronRight className="h-3 w-3" />
-                    </Link>
-                  )}
-                </div>
+                <CardTitle className="text-base">KYC Verification Status</CardTitle>
               </CardHeader>
               <CardContent>
-                {!citizen.kyc ? (
-                  <div className="flex flex-col items-center justify-center py-10 text-center">
-                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
-                      <CreditCard className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                    <p className="font-medium">No KYC submitted</p>
-                    <p className="text-sm text-muted-foreground">This citizen has not submitted identity documents</p>
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="mb-4">
+                    <KycBadge status={citizen.kyc_status} />
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      {[
-                        { label: "ID Type",    value: ID_TYPE_LABELS[citizen.kyc.id_type] ?? citizen.kyc.id_type },
-                        { label: "ID Number",  value: citizen.kyc.id_number },
-                        { label: "Submitted",  value: fmt(citizen.kyc.submitted_at) },
-                        { label: "Reviewed",   value: citizen.kyc.reviewed_at ? fmt(citizen.kyc.reviewed_at) : "Not yet" },
-                      ].map(row => (
-                        <div key={row.label} className="rounded-lg p-3" style={{ backgroundColor: "var(--muted)" }}>
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{row.label}</p>
-                          <p className="mt-0.5 font-semibold">{row.value}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {citizen.kyc.rejection_reason && (
-                      <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-sm">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-red-500 mb-1">Rejection Reason</p>
-                        <p className="text-red-600">{citizen.kyc.rejection_reason}</p>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-3 gap-3">
-                      {[
-                        { src: citizen.kyc.image_front,  label: "Front" },
-                        { src: citizen.kyc.image_back,   label: "Back" },
-                        { src: citizen.kyc.image_selfie, label: "Selfie" },
-                      ].map(img => (
-                        <div key={img.label} className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--border)" }}>
-                          <div className="relative aspect-[16/10] bg-muted">
-                            <Image src={img.src} alt={img.label} fill className="object-cover" unoptimized />
-                          </div>
-                          <p className="py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            {img.label}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  <p className="font-medium text-lg mb-2">
+                    {citizen.kyc_status === "approved" && "KYC Approved"}
+                    {citizen.kyc_status === "pending" && "KYC Pending Review"}
+                    {citizen.kyc_status === "rejected" && "KYC Rejected"}
+                    {citizen.kyc_status === "not_submitted" && "KYC Not Submitted"}
+                  </p>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    {citizen.kyc_status === "approved" && "This citizen's identity has been verified and approved."}
+                    {citizen.kyc_status === "pending" && "This citizen's KYC documents are awaiting review in the KYC microservice."}
+                    {citizen.kyc_status === "rejected" && "This citizen's KYC submission was rejected. They need to resubmit."}
+                    {citizen.kyc_status === "not_submitted" && "This citizen has not submitted identity documents yet."}
+                  </p>
+                  {citizen.kyc_processed_at && (
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Processed: {fmt(citizen.kyc_processed_at)}
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>

@@ -132,7 +132,7 @@ export default function KycReviewPage() {
               <div className="space-y-2.5 text-sm">
                 {[
                   { icon: User,     label: "Email",     value: citizen.email },
-                  { icon: Calendar, label: "Joined",    value: fmt(citizen.joined_at) },
+                  { icon: Calendar, label: "Joined",    value: fmt(citizen.joined_at || citizen.created_at) },
                   { icon: CreditCard, label: "ID Type", value: ID_TYPE_LABELS[kyc.id_type] ?? kyc.id_type },
                   { icon: CreditCard, label: "ID Number", value: kyc.id_number },
                   { icon: Calendar, label: "Submitted", value: fmt(kyc.submitted_at) },

@@ -155,7 +155,7 @@ export default function CitizensPage() {
                       <TableCell className="py-3.5 font-mono text-sm">{c.phone}</TableCell>
                       <TableCell className="py-3.5 text-sm text-muted-foreground">{c.email}</TableCell>
                       <TableCell className="py-3.5"><KycBadge status={c.kyc_status} /></TableCell>
-                      <TableCell className="py-3.5 text-sm text-muted-foreground">{fmt(c.joined_at)}</TableCell>
+                      <TableCell className="py-3.5 text-sm text-muted-foreground">{fmt(c.joined_at || c.created_at)}</TableCell>
                       <TableCell className="py-3.5">
                         <Link href={`/admin/citizens/${c.id}`}>
                           <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
