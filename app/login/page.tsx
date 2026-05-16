@@ -182,7 +182,7 @@ export default function LoginPage() {
           </form>
 
           {/* Legal notice */}
-          <div className="mt-5 rounded-lg px-4 py-3"
+          {/* <div className="mt-5 rounded-lg px-4 py-3"
             style={{ backgroundColor: "#f9fafb", borderLeft: "3px solid #ef4444" }}>
             <p className="mb-0.5 text-[10px] font-bold tracking-widest" style={{ color: "#ef4444" }}>
               LEGAL NOTICE
@@ -190,18 +190,18 @@ export default function LoginPage() {
             <p className="text-[11px] leading-relaxed" style={{ color: "#6b7280" }}>
               Unauthorized access is strictly prohibited and monitored under Federal Emergency Management protocols.
             </p>
-          </div>
+          </div> */}
 
         </div>
 
         {/* Footer */}
         <div className="mt-5 flex w-full items-center justify-between">
-          <div className="flex items-center gap-1.5">
+          {/* <div className="flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
             <span className="text-[10px] font-semibold tracking-widest" style={{ color: "#9ca3af" }}>
               NETWORK ENCRYPTED
             </span>
-          </div>
+          </div> */}
           <p className="text-[10px] tracking-widest" style={{ color: "#9ca3af" }}>
             © 2026 ERAS
           </p>
