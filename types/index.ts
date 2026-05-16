@@ -169,8 +169,13 @@ export interface Citizen {
   full_name: string;
   phone: string;
   email: string;
-  joined_at: string;
-  is_active: boolean;
+  role: Role;
+  is_verified: boolean;
   kyc_status: KycStatus;
+  kyc_processed_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  // Computed field for backward compatibility
+  joined_at?: string;
   kyc?: KycDocument | null;
 }

@@ -223,40 +223,64 @@ export const operatorsAPI = {
   },
 };
 
-// ── Mock Citizens API (swap with real endpoints when available) ───────────────
+// ── Citizens API ───────────────────────────────────────────────────────────────
 
-const MOCK_CITIZENS: Citizen[] = [
-  { id: "c1", full_name: "Abebe Kebede",   phone: "0911234567", email: "abebe@example.com",   joined_at: "2026-01-15T08:00:00Z", is_active: true,  kyc_status: "approved",      kyc: { id: "k1", id_type: "national_id",      id_number: "ETH-1234567", image_front: "https://placehold.co/400x250/e2e8f0/64748b?text=ID+Front", image_back: "https://placehold.co/400x250/e2e8f0/64748b?text=ID+Back", image_selfie: "https://placehold.co/400x250/e2e8f0/64748b?text=Selfie", submitted_at: "2026-01-16T10:00:00Z", reviewed_at: "2026-01-17T09:00:00Z", status: "approved", rejection_reason: null } },
-  { id: "c2", full_name: "Tigist Alemu",   phone: "0922345678", email: "tigist@example.com",   joined_at: "2026-02-03T09:30:00Z", is_active: true,  kyc_status: "pending",       kyc: { id: "k2", id_type: "passport",         id_number: "EP-9876543", image_front: "https://placehold.co/400x250/e2e8f0/64748b?text=Passport", image_back: "https://placehold.co/400x250/e2e8f0/64748b?text=Passport+Back", image_selfie: "https://placehold.co/400x250/e2e8f0/64748b?text=Selfie", submitted_at: "2026-02-04T11:00:00Z", reviewed_at: null, status: "pending", rejection_reason: null } },
-  { id: "c3", full_name: "Dawit Haile",    phone: "0933456789", email: "dawit@example.com",    joined_at: "2026-02-10T14:00:00Z", is_active: true,  kyc_status: "rejected",      kyc: { id: "k3", id_type: "drivers_license",  id_number: "DL-5551234", image_front: "https://placehold.co/400x250/e2e8f0/64748b?text=License", image_back: "https://placehold.co/400x250/e2e8f0/64748b?text=License+Back", image_selfie: "https://placehold.co/400x250/e2e8f0/64748b?text=Selfie", submitted_at: "2026-02-11T08:00:00Z", reviewed_at: "2026-02-12T10:00:00Z", status: "rejected", rejection_reason: "Image quality too low" } },
-  { id: "c4", full_name: "Meron Tadesse",  phone: "0944567890", email: "meron@example.com",    joined_at: "2026-02-20T10:00:00Z", is_active: true,  kyc_status: "pending",       kyc: { id: "k4", id_type: "national_id",      id_number: "ETH-7654321", image_front: "https://placehold.co/400x250/e2e8f0/64748b?text=ID+Front", image_back: "https://placehold.co/400x250/e2e8f0/64748b?text=ID+Back", image_selfie: "https://placehold.co/400x250/e2e8f0/64748b?text=Selfie", submitted_at: "2026-02-21T09:00:00Z", reviewed_at: null, status: "pending", rejection_reason: null } },
-  { id: "c5", full_name: "Yonas Girma",    phone: "0955678901", email: "yonas@example.com",    joined_at: "2026-03-01T07:00:00Z", is_active: false, kyc_status: "not_submitted", kyc: null },
-  { id: "c6", full_name: "Hana Bekele",    phone: "0966789012", email: "hana@example.com",     joined_at: "2026-03-05T11:00:00Z", is_active: true,  kyc_status: "approved",      kyc: { id: "k6", id_type: "passport",         id_number: "EP-1122334", image_front: "https://placehold.co/400x250/e2e8f0/64748b?text=Passport", image_back: "https://placehold.co/400x250/e2e8f0/64748b?text=Passport+Back", image_selfie: "https://placehold.co/400x250/e2e8f0/64748b?text=Selfie", submitted_at: "2026-03-06T08:00:00Z", reviewed_at: "2026-03-07T10:00:00Z", status: "approved", rejection_reason: null } },
-  { id: "c7", full_name: "Samuel Worku",   phone: "0977890123", email: "samuel@example.com",   joined_at: "2026-03-12T13:00:00Z", is_active: true,  kyc_status: "pending",       kyc: { id: "k7", id_type: "national_id",      id_number: "ETH-3344556", image_front: "https://placehold.co/400x250/e2e8f0/64748b?text=ID+Front", image_back: "https://placehold.co/400x250/e2e8f0/64748b?text=ID+Back", image_selfie: "https://placehold.co/400x250/e2e8f0/64748b?text=Selfie", submitted_at: "2026-03-13T09:00:00Z", reviewed_at: null, status: "pending", rejection_reason: null } },
-  { id: "c8", full_name: "Liya Solomon",   phone: "0988901234", email: "liya@example.com",     joined_at: "2026-03-18T09:00:00Z", is_active: true,  kyc_status: "not_submitted", kyc: null },
-  { id: "c9", full_name: "Biruk Tesfaye",  phone: "0999012345", email: "biruk@example.com",    joined_at: "2026-03-25T15:00:00Z", is_active: true,  kyc_status: "pending",       kyc: { id: "k9", id_type: "drivers_license",  id_number: "DL-9988776", image_front: "https://placehold.co/400x250/e2e8f0/64748b?text=License", image_back: "https://placehold.co/400x250/e2e8f0/64748b?text=License+Back", image_selfie: "https://placehold.co/400x250/e2e8f0/64748b?text=Selfie", submitted_at: "2026-03-26T10:00:00Z", reviewed_at: null, status: "pending", rejection_reason: null } },
-  { id: "c10", full_name: "Rahel Mekonnen", phone: "0900123456", email: "rahel@example.com",   joined_at: "2026-04-01T08:00:00Z", is_active: true,  kyc_status: "approved",      kyc: { id: "k10", id_type: "national_id",     id_number: "ETH-6677889", image_front: "https://placehold.co/400x250/e2e8f0/64748b?text=ID+Front", image_back: "https://placehold.co/400x250/e2e8f0/64748b?text=ID+Back", image_selfie: "https://placehold.co/400x250/e2e8f0/64748b?text=Selfie", submitted_at: "2026-04-02T09:00:00Z", reviewed_at: "2026-04-03T11:00:00Z", status: "approved", rejection_reason: null } },
-];
+interface CitizensListResponse {
+  data: Citizen[];
+  total: number;
+}
 
-function delay<T>(val: T, ms = 400): Promise<T> {
-  return new Promise(r => setTimeout(() => r(val), ms));
+/** Extract citizen rows from common API shapes and normalize field names. */
+function citizensArrayFromListBody(body: unknown): Citizen[] {
+  if (body === null || body === undefined) return [];
+  
+  let citizens: Citizen[] = [];
+  
+  if (Array.isArray(body)) {
+    citizens = body as Citizen[];
+  } else if (typeof body === "object") {
+    const o = body as Record<string, unknown>;
+    
+    if (Array.isArray(o.data)) {
+      citizens = o.data as Citizen[];
+    } else if (Array.isArray(o.results)) {
+      citizens = o.results as Citizen[];
+    } else {
+      const nested = o.data;
+      if (nested && typeof nested === "object" && Array.isArray((nested as Record<string, unknown>).results)) {
+        citizens = (nested as { results: Citizen[] }).results;
+      }
+    }
+  }
+
+  // Normalize field names: map created_at to joined_at for backward compatibility
+  return citizens.map(c => ({
+    ...c,
+    joined_at: c.joined_at || c.created_at,
+  }));
 }
 
 export const citizensAPI = {
-  list(): Promise<Citizen[]> {
-    return delay([...MOCK_CITIZENS]);
+  async list(): Promise<Citizen[]> {
+    const body = await request<unknown>("/api/admin/citizens/");
+    return citizensArrayFromListBody(body);
   },
-  get(id: string): Promise<Citizen | null> {
-    return delay(MOCK_CITIZENS.find(c => c.id === id) ?? null);
+
+  async get(id: string): Promise<Citizen | null> {
+    const citizen = await request<Citizen>(`/api/admin/citizens/${id}/`);
+    if (!citizen) return null;
+    
+    // Normalize field names: map created_at to joined_at for backward compatibility
+    return {
+      ...citizen,
+      joined_at: citizen.joined_at || citizen.created_at,
+    };
   },
-  reviewKyc(citizenId: string, action: "approve" | "reject", reason?: string): Promise<Citizen | null> {
-    const c = MOCK_CITIZENS.find(c => c.id === citizenId);
-    if (!c || !c.kyc) return delay(null);
-    const newStatus: KycStatus = action === "approve" ? "approved" : "rejected";
-    c.kyc.status = newStatus;
-    c.kyc.reviewed_at = new Date().toISOString();
-    c.kyc.rejection_reason = reason ?? null;
-    c.kyc_status = newStatus;
-    return delay({ ...c });
+
+  reviewKyc(citizenId: string, action: "approve" | "reject", reason?: string) {
+    return request<Citizen>(`/api/admin/citizens/${citizenId}/review-kyc/`, {
+      method: "POST",
+      body: JSON.stringify({ action, reason }),
+    });
   },
 };
