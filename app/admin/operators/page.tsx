@@ -9,6 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
@@ -205,64 +212,85 @@ export default function OperatorsPage() {
           </Alert>
         )}
 
-        {/* Add form */}
-        {showForm && (
-          <Card className="mb-6 border-0 shadow-sm rounded-xl">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">New Operator</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleCreate}>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {[
-                    { id: "full_name", label: "Full Name",  type: "text" },
-                    { id: "phone",     label: "Phone",      type: "text" },
-                    { id: "email",     label: "Email",      type: "email" },
-                  ].map(f => (
-                    <div key={f.id} className="space-y-1.5">
-                      <Label htmlFor={f.id} className="text-xs font-semibold uppercase tracking-wide">
-                        {f.label}
-                      </Label>
-                      <Input
-                        id={f.id}
-                        type={f.type}
-                        value={form[f.id as keyof typeof form]}
-                        onChange={e => updateField(f.id, e.target.value)}
-                        className="h-9 rounded-lg text-sm"
-                        required
-                      />
-                    </div>
-                  ))}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold uppercase tracking-wide">Station</Label>
-                    <Select value={form.station_id} onValueChange={v => updateField("station_id", v)}>
-                      <SelectTrigger className="h-9 rounded-lg text-sm">
-                        <SelectValue placeholder="Select a station" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {stations.map(s => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name} ({s.type})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+        {/* Add Operator Modal */}
+        <Dialog open={showForm} onOpenChange={setShowForm}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>New Operator</DialogTitle>
+              <DialogDescription>
+                Add a new operator to the system. They will receive a temporary password.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {[
+                  { id: "full_name", label: "Full Name",  type: "text" },
+                  { id: "phone",     label: "Phone",      type: "text" },
+                ].map(f => (
+                  <div key={f.id} className="space-y-2">
+                    <Label htmlFor={f.id} className="text-xs font-semibold uppercase tracking-wide">
+                      {f.label}
+                    </Label>
+                    <Input
+                      id={f.id}
+                      type={f.type}
+                      value={form[f.id as keyof typeof form]}
+                      onChange={e => updateField(f.id, e.target.value)}
+                      className="h-9 rounded-lg"
+                      required
+                    />
                   </div>
-                </div>
-                <div className="mt-5 flex justify-end gap-2">
-                  <Button type="button" variant="outline" className="rounded-lg"
-                    onClick={() => { setShowForm(false); setForm({ full_name: "", phone: "", email: "", station_id: "" }); }}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={submitting} className="rounded-lg gap-2">
-                    {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                    {submitting ? "Creating..." : "Create Operator"}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        )}
+                ))}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wide">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={form.email}
+                  onChange={e => updateField("email", e.target.value)}
+                  className="h-9 rounded-lg"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide">Station</Label>
+                <Select value={form.station_id} onValueChange={v => updateField("station_id", v)} required>
+                  <SelectTrigger className="h-9 rounded-lg">
+                    <SelectValue placeholder="Select a station" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-muted [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50">
+                    {stations.map(s => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name} ({s.type})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="rounded-lg"
+                  onClick={() => { 
+                    setShowForm(false); 
+                    setForm({ full_name: "", phone: "", email: "", station_id: "" }); 
+                  }}
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={submitting} className="rounded-lg gap-2">
+                  {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {submitting ? "Creating..." : "Create Operator"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         {/* Table */}
         {loading ? (
