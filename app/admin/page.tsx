@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -15,6 +15,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Sidebar from "@/components/layout/Sidebar";
+import IncidentForwardingAdmin from "@/components/admin/IncidentForwardingAdmin";
 import type { AdminDashboardData, Station } from "@/types";
 import { dashboardAPI, stationsAPI } from "@/lib/api";
 
@@ -452,6 +453,14 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
+        </div>
+
+        {/* ── Incident forwarding (admin) ── */}
+        <div className="mt-6">
+          <p className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Incident forwarding
+          </p>
+          <IncidentForwardingAdmin />
         </div>
 
         {/* ── Stations Map ── */}

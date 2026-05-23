@@ -51,14 +51,22 @@ import { useToast } from "@/lib/useToast";
 import { useIncidentSocket } from "@/lib/useIncidentSocket";
 import {
   normalizeIncidentStatus,
-  getPrimaryNextStatus,
-  getPrimaryNextLabel,
   canMarkFalseAlarm,
   isTerminalStatus,
   isAutoOnlyStatus,
   isUnread,
+  canForwardIncident,
+  shouldShowUnitTracking,
+  needsUnitAssignment,
+  isAwaitingClosure,
+  isFieldProgressByUnit,
+  getOperatorWorkflowHint,
+  shouldAcknowledgeOnOpen,
 } from "@/lib/incident-workflow";
-import type { Incident, IncidentStatus } from "@/types";
+import ForwardIncidentControls from "@/components/incidents/ForwardIncidentControls";
+import AssignUnitControls from "@/components/incidents/AssignUnitControls";
+import UnitTrackingMap from "@/components/incidents/UnitTrackingMap";
+import type { Incident, IncidentStatus, UnitLocationPing } from "@/types";
 
 const IncidentMap = dynamic(() => import("@/components/incidents/IncidentMap"), {
   ssr: false,
@@ -588,12 +596,14 @@ function DetailField({ icon: Icon, label, children }: {
   );
 }
 
-function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatusUpdate }: {
+function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatusUpdate, onForwardedAway, unitLiveLocation }: {
   incident: Incident;
   detail: Incident | null;
   loadingDetail: boolean;
   onClose: () => void;
   onStatusUpdate: (updated: Incident) => void;
+  onForwardedAway: (incidentId: string) => void;
+  unitLiveLocation?: UnitLocationPing | null;
 }) {
   const data = detail ?? incident;
   const [updating, setUpdating] = useState(false);
@@ -609,10 +619,13 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
     icon: IconAlertHexagon,
   };
   const coords = latLng(data);
-  const primaryNext = getPrimaryNextStatus(data.status);
   const showFalseAlarm = canMarkFalseAlarm(data.status);
   const autoOnly = isAutoOnlyStatus(data.status);
   const terminal = isTerminalStatus(data.status);
+  const showForward = canForwardIncident(data.status);
+  const workflowHint = getOperatorWorkflowHint(data);
+  const awaitingClosure = isAwaitingClosure(data.status);
+  const showTracking = shouldShowUnitTracking(data);
 
   async function patchStatus(status: IncidentStatus) {
     setUpdating(true);
@@ -728,6 +741,28 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
               </DetailField>
             </div>
 
+            <div className="px-5 py-4">
+              <AssignUnitControls
+                incident={data}
+                disabled={updating}
+                onUpdated={onStatusUpdate}
+              />
+            </div>
+
+            {showTracking && coords && (
+              <div className="px-5 py-4">
+                <DetailField icon={IconNavigation} label="Live unit tracking">
+                  <UnitTrackingMap
+                    incidentId={data.id}
+                    incidentLat={coords[0]}
+                    incidentLng={coords[1]}
+                    liveLocation={unitLiveLocation}
+                    enabled={showTracking}
+                  />
+                </DetailField>
+              </div>
+            )}
+
             {data.assigned_station && (
               <div className="px-5 py-4">
                 <DetailField icon={IconBuildingHospital} label="Assigned Station">
@@ -828,7 +863,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
             <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ backgroundColor: "var(--muted)" }}>
               <IconRadar size={16} stroke={1.5} />
-              Open incident to acknowledge and dispatch
+              {workflowHint ?? "System is processing this incident."}
             </div>
           )}
           {terminal && (
@@ -838,22 +873,29 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
               No further actions
             </div>
           )}
-          {!autoOnly && !terminal && (
+          {awaitingClosure && !terminal && (
+            <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
+              style={{ backgroundColor: "var(--muted)" }}>
+              <IconClockHour4 size={16} stroke={1.5} />
+              {workflowHint ?? "Awaiting citizen feedback or unit closure."}
+            </div>
+          )}
+          {!autoOnly && !terminal && !awaitingClosure && (
             <>
-              {primaryNext && (
-                <Button
-                  className="w-full gap-2 rounded-xl"
-                  disabled={updating}
-                  onClick={() => patchStatus(primaryNext)}
-                  style={
-                    primaryNext === "resolved"
-                      ? { backgroundColor: "color-mix(in oklch, var(--chart-2) 85%, transparent)", color: "white" }
-                      : undefined
-                  }
+              {workflowHint && (
+                <div
+                  className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
+                  style={{ backgroundColor: "var(--muted)" }}
                 >
-                  {updating ? <IconLoader2 size={16} stroke={1.5} className="animate-spin" /> : <IconChevronRight size={16} stroke={1.5} />}
-                  {updating ? "Updating…" : getPrimaryNextLabel(data.status)}
-                </Button>
+                  {needsUnitAssignment(data) ? (
+                    <IconUser size={16} stroke={1.5} />
+                  ) : isFieldProgressByUnit(data) ? (
+                    <IconActivity size={16} stroke={1.5} />
+                  ) : (
+                    <IconRadar size={16} stroke={1.5} />
+                  )}
+                  {workflowHint}
+                </div>
               )}
               {showFalseAlarm && (
                 <Button
@@ -864,6 +906,13 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
                 >
                   Mark False Alarm
                 </Button>
+              )}
+              {showForward && (
+                <ForwardIncidentControls
+                  incident={data}
+                  disabled={updating}
+                  onForwardedAway={onForwardedAway}
+                />
               )}
             </>
           )}
@@ -885,6 +934,9 @@ function IncidentsPageInner() {
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+  const [unitLiveByIncident, setUnitLiveByIncident] = useState<
+    Record<string, UnitLocationPing>
+  >({});
 
   const {
     incidents,
@@ -898,11 +950,34 @@ function IncidentsPageInner() {
   } = useIncidentSocket({
     enabled: !checking,
     onIncidentUpdated(updated) {
-      // Keep the detail panel in sync when the currently viewed incident changes.
       setSelected(prev => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
       setDetail(prev => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
     },
+    onIncidentForwardedAway(id) {
+      setSelected((prev) => (prev?.id === id ? null : prev));
+      setDetail((prev) => (prev?.id === id ? null : prev));
+      setUnitLiveByIncident((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    },
+    onUnitLocationUpdate(incidentId, location) {
+      setUnitLiveByIncident((prev) => ({
+        ...prev,
+        [incidentId]: location,
+      }));
+    },
   });
+
+  const handleForwardedAway = useCallback(
+    (incidentId: string) => {
+      setIncidents((prev) => prev.filter((i) => i.id !== incidentId));
+      setSelected((prev) => (prev?.id === incidentId ? null : prev));
+      setDetail((prev) => (prev?.id === incidentId ? null : prev));
+    },
+    [setIncidents]
+  );
 
   const applyIncidentUpdate = useCallback((updated: Incident) => {
     setIncidents((prev) =>
@@ -914,19 +989,30 @@ function IncidentsPageInner() {
 
   function openDetail(incident: Incident) {
     const wasUnread = isUnread(incident);
+    const shouldAck = shouldAcknowledgeOnOpen(incident);
     setSelected(incident);
     setDetail(null);
     setLoadingDetail(true);
-    incidentsAPI.get(incident.id).then((res) => {
-      if (res) {
-        applyIncidentUpdate(res);
+
+    (async () => {
+      const [detailRes, readRes] = await Promise.all([
+        incidentsAPI.get(incident.id),
+        shouldAck ? incidentsAPI.markRead(incident.id) : Promise.resolve(null),
+      ]);
+
+      const merged = readRes ?? detailRes;
+      if (merged) {
+        applyIncidentUpdate(merged);
         if (wasUnread) {
           setUnreadCount((c) => Math.max(0, c - 1));
         }
+      } else if (detailRes) {
+        applyIncidentUpdate(detailRes);
       }
-      setDetail(res);
+
+      setDetail(merged ?? detailRes);
       setLoadingDetail(false);
-    });
+    })();
   }
 
   function closeDetail() {
@@ -1106,6 +1192,7 @@ function IncidentsPageInner() {
                           <TableHead className="text-xs font-bold uppercase tracking-wider">Category</TableHead>
                           <TableHead className="text-xs font-bold uppercase tracking-wider">Reporter</TableHead>
                           <TableHead className="text-xs font-bold uppercase tracking-wider">Station</TableHead>
+                          <TableHead className="text-xs font-bold uppercase tracking-wider">Unit</TableHead>
                           <TableHead className="text-xs font-bold uppercase tracking-wider">Status</TableHead>
                           <TableHead className="text-xs font-bold uppercase tracking-wider">Time</TableHead>
                           <TableHead className="w-12 text-xs font-bold uppercase tracking-wider" />
@@ -1146,6 +1233,9 @@ function IncidentsPageInner() {
                               <TableCell className="py-4 text-sm text-muted-foreground">
                                 {incident.assigned_station?.name ?? "—"}
                               </TableCell>
+                              <TableCell className="py-4 text-sm text-muted-foreground">
+                                {incident.assigned_unit?.name ?? "—"}
+                              </TableCell>
                               <TableCell className="py-4"><StatusBadge status={incident.status} /></TableCell>
                               <TableCell className="py-4 font-mono text-sm text-muted-foreground">
                                 {formatTime(incident.created_at)}
@@ -1185,6 +1275,10 @@ function IncidentsPageInner() {
                   <IncidentDetailPanel
                     incident={selected} detail={detail} loadingDetail={loadingDetail}
                     onClose={closeDetail} onStatusUpdate={handleStatusUpdate}
+                    unitLiveLocation={
+                      selected ? unitLiveByIncident[selected.id] ?? null : null
+                    }
+                    onForwardedAway={handleForwardedAway}
                   />
                 </Card>
               </div>

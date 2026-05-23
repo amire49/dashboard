@@ -48,11 +48,45 @@ export type BackendIncidentPayload = {
   audio_url?: string;
   is_read?: boolean;
   is_new?: boolean;
+  assigned_unit?: unknown;
+  unit_assigned_at?: string | null;
+};
+
+export type BackendUnitLocationPayload = {
+  event: "unit.location_update";
+  incident_id: string;
+  status?: string;
+  unit?: { id: string; name: string; unit_type: string };
+  location?: {
+    latitude: string | number;
+    longitude: string | number;
+    location_accuracy_m?: number | null;
+    recorded_at?: string;
+  };
+};
+
+export type BackendUnitAssignedPayload = {
+  event: "unit.assigned";
+  incident_id: string;
+  status?: string;
+  unit?: unknown;
+  assigned_unit?: unknown;
+  unit_assigned_at?: string;
+};
+
+export type BackendUnitDetachedPayload = {
+  event: "unit.detached";
+  incident_id: string;
+  status?: string;
 };
 
 export type BackendWSMessage =
   | ({ event: "incident.new" } & BackendIncidentPayload)
-  | ({ event: "incident.update" | "incident.status_changed" } & BackendIncidentPayload)
+  | ({ event: "incident.forwarded" } & BackendIncidentPayload)
+  | ({ event: "incident.update" | "incident.status_changed" | "incident.status_update" } & BackendIncidentPayload)
+  | BackendUnitLocationPayload
+  | BackendUnitAssignedPayload
+  | BackendUnitDetachedPayload
   | { event: "ping" | "pong" }
   | { type: "incident_created"; incident: unknown }
   | { type: "incident_updated" | "incident_status_changed"; incident: unknown }

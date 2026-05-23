@@ -1,4 +1,5 @@
 import { getAccessToken, clearAuth } from "@/lib/auth";
+import type { ForwardTarget } from "@/lib/incident-forward";
 import type {
   LoginRequest,
   LoginResponse,
@@ -11,8 +12,16 @@ import type {
   ResetPasswordResponse,
   Incident,
   IncidentsListResponse,
+  IncidentForwardResponse,
+  IncidentForwardingSettings,
+  StationNonResponseStatsResponse,
+  IncidentForwardHistoryResponse,
   Citizen,
   KycStatus,
+  ResponseUnit,
+  CreateResponseUnitPayload,
+  CreateResponseUnitResponse,
+  UnitTrackingResponse,
 } from "@/types";
 
 const BASE_URL =
@@ -59,6 +68,72 @@ async function request<T>(
     return (await res.json()) as T;
   } catch {
     return null;
+  }
+}
+
+function parseApiErrorBody(body: unknown): string {
+  if (body === null || body === undefined) return "Request failed";
+  if (typeof body === "string") {
+    if (body.trimStart().startsWith("<!") || body.includes("<html")) {
+      return "Server error — try again or contact support.";
+    }
+    return body;
+  }
+  if (typeof body !== "object") return "Request failed";
+  const o = body as Record<string, unknown>;
+  if (typeof o.detail === "string") return o.detail;
+  if (Array.isArray(o.detail)) {
+    return o.detail.map((d) => String(d)).join(". ");
+  }
+  const parts: string[] = [];
+  for (const [key, val] of Object.entries(o)) {
+    if (key === "detail") continue;
+    if (Array.isArray(val)) parts.push(`${key}: ${val.join(", ")}`);
+    else if (typeof val === "string") parts.push(val);
+  }
+  return parts.length > 0 ? parts.join(". ") : "Request failed";
+}
+
+/** Like `request` but returns a human-readable error message on failure. */
+async function requestWithError<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<{ data: T | null; error: string | null }> {
+  try {
+    const token = getAccessToken();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...((options.headers as Record<string, string>) || {}),
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await nativeFetch(`${BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    if (res.status === 401) {
+      clearAuth();
+      if (typeof window !== "undefined") window.location.href = "/login";
+      return { data: null, error: "Session expired" };
+    }
+
+    if (res.status === 204) return { data: null, error: null };
+
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+
+    if (!res.ok) {
+      return { data: null, error: parseApiErrorBody(body) };
+    }
+
+    return { data: body as T, error: null };
+  } catch {
+    return { data: null, error: "Network error" };
   }
 }
 
@@ -172,6 +247,26 @@ function unreadCountFromListBody(body: unknown): number | undefined {
   return typeof n === "number" ? n : undefined;
 }
 
+function stationsArrayFromListBody(body: unknown): Station[] {
+  if (body === null || body === undefined) return [];
+  if (Array.isArray(body)) return body as Station[];
+  if (typeof body !== "object") return [];
+  const o = body as Record<string, unknown>;
+  if (Array.isArray(o.data)) return o.data as Station[];
+  if (Array.isArray(o.results)) return o.results as Station[];
+  return [];
+}
+
+function unitsArrayFromListBody(body: unknown): ResponseUnit[] {
+  if (body === null || body === undefined) return [];
+  if (Array.isArray(body)) return body as ResponseUnit[];
+  if (typeof body !== "object") return [];
+  const o = body as Record<string, unknown>;
+  if (Array.isArray(o.data)) return o.data as ResponseUnit[];
+  if (Array.isArray(o.results)) return o.results as ResponseUnit[];
+  return [];
+}
+
 export const incidentsAPI = {
   async list(): Promise<IncidentsListResponse | null> {
     const body = await request<unknown>("/api/operator/incidents/");
@@ -196,6 +291,150 @@ export const incidentsAPI = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     });
+  },
+
+  async forward(
+    incidentId: string,
+    body: { target: ForwardTarget; station_id?: string; reason?: string }
+  ) {
+    return requestWithError<IncidentForwardResponse>(
+      `/api/operator/incidents/${incidentId}/forward/`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    );
+  },
+
+  async listOperatorStations(): Promise<Station[]> {
+    const body = await request<unknown>("/api/operator/stations/");
+    return stationsArrayFromListBody(body);
+  },
+
+  async assignUnit(incidentId: string, unitId: string) {
+    return requestWithError<Incident>(
+      `/api/operator/incidents/${incidentId}/assign-unit/`,
+      {
+        method: "POST",
+        body: JSON.stringify({ unit_id: unitId }),
+      }
+    );
+  },
+
+  async detachUnit(incidentId: string) {
+    return requestWithError<Incident>(
+      `/api/operator/incidents/${incidentId}/detach-unit/`,
+      { method: "POST" }
+    );
+  },
+
+  getUnitTracking(incidentId: string) {
+    return request<UnitTrackingResponse>(
+      `/api/operator/incidents/${incidentId}/unit-tracking/`
+    );
+  },
+};
+
+export const unitsAPI = {
+  async list(params?: {
+    include_inactive?: boolean;
+    available_only?: boolean;
+  }): Promise<ResponseUnit[]> {
+    const q = new URLSearchParams();
+    if (params?.include_inactive) q.set("include_inactive", "true");
+    if (params?.available_only) q.set("available_only", "true");
+    const qs = q.toString();
+    const endpoint = qs
+      ? `/api/operator/units/?${qs}`
+      : "/api/operator/units/";
+    const body = await request<unknown>(endpoint);
+    return unitsArrayFromListBody(body);
+  },
+
+  create(data: CreateResponseUnitPayload) {
+    return requestWithError<CreateResponseUnitResponse>(
+      "/api/operator/units/",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  get(id: string) {
+    return request<ResponseUnit>(`/api/operator/units/${id}/`);
+  },
+
+  update(
+    id: string,
+    data: Partial<{
+      name: string;
+      unit_type: string;
+      notes: string;
+      is_active: boolean;
+    }>
+  ) {
+    return requestWithError<ResponseUnit>(`/api/operator/units/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deactivate(id: string): Promise<{ ok: boolean; error: string | null }> {
+    const patch = await requestWithError<ResponseUnit>(
+      `/api/operator/units/${id}/`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: false }),
+      }
+    );
+    if (patch.data) return { ok: true, error: null };
+
+    const del = await requestWithError<null>(`/api/operator/units/${id}/`, {
+      method: "DELETE",
+    });
+    if (!del.error) return { ok: true, error: null };
+
+    return {
+      ok: false,
+      error: patch.error ?? del.error ?? "Could not deactivate unit.",
+    };
+  },
+
+  async reactivate(id: string): Promise<{ ok: boolean; error: string | null }> {
+    const { data, error } = await this.update(id, { is_active: true });
+    if (data) return { ok: true, error: null };
+    return { ok: false, error: error ?? "Could not reactivate unit." };
+  },
+};
+
+export const incidentForwardingAdminAPI = {
+  getSettings() {
+    return request<IncidentForwardingSettings>(
+      "/api/admin/settings/incident-forwarding/"
+    );
+  },
+
+  updateSettings(undispatched_forward_minutes: number) {
+    return requestWithError<IncidentForwardingSettings>(
+      "/api/admin/settings/incident-forwarding/",
+      {
+        method: "PATCH",
+        body: JSON.stringify({ undispatched_forward_minutes }),
+      }
+    );
+  },
+
+  getNonResponseStats() {
+    return request<StationNonResponseStatsResponse>(
+      "/api/admin/stations/non-response-stats/"
+    );
+  },
+
+  getForwardHistory(incidentId: string) {
+    return request<IncidentForwardHistoryResponse>(
+      `/api/admin/incidents/${incidentId}/forward-history/`
+    );
   },
 };
 

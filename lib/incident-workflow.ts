@@ -1,37 +1,16 @@
-import type { IncidentStatus } from "@/types";
+import type { AssignedUnitBrief, Incident, IncidentStatus } from "@/types";
 
 export function normalizeIncidentStatus(s: string): string {
   return s.toLowerCase().replace(/\s+/g, "_");
 }
 
-const PRIMARY_NEXT: Record<string, IncidentStatus> = {
-  dispatched: "en_route",
-  en_route: "reached",
-  reached: "served",
-  served: "resolved",
-};
+/** Statuses the response unit advances via PATCH (field app). */
+const UNIT_FIELD_STATUSES = new Set(["en_route", "reached", "served"]);
 
+/** Operator or unit may mark false alarm from these statuses. */
 const FALSE_ALARM_FROM = new Set(["dispatched", "en_route", "reached"]);
 
 const TERMINAL = new Set(["resolved", "false_alarm"]);
-
-const PRIMARY_LABELS: Record<string, string> = {
-  en_route: "Mark En Route",
-  reached: "Mark Reached",
-  served: "Mark Served",
-  resolved: "Close Incident",
-};
-
-export function getPrimaryNextStatus(current: string): IncidentStatus | null {
-  const s = normalizeIncidentStatus(current);
-  return PRIMARY_NEXT[s] ?? null;
-}
-
-export function getPrimaryNextLabel(current: string): string {
-  const next = getPrimaryNextStatus(current);
-  if (!next) return "";
-  return PRIMARY_LABELS[normalizeIncidentStatus(next)] ?? `Mark ${next.replace(/_/g, " ")}`;
-}
 
 export function canMarkFalseAlarm(current: string): boolean {
   return FALSE_ALARM_FROM.has(normalizeIncidentStatus(current));
@@ -41,6 +20,7 @@ export function isTerminalStatus(current: string): boolean {
   return TERMINAL.has(normalizeIncidentStatus(current));
 }
 
+/** System-only steps before operator acknowledges (opens detail). */
 export function isAutoOnlyStatus(current: string): boolean {
   const s = normalizeIncidentStatus(current);
   return s === "pending" || s === "routed";
@@ -48,4 +28,100 @@ export function isAutoOnlyStatus(current: string): boolean {
 
 export function isUnread(incident: { is_read?: boolean; is_new?: boolean }): boolean {
   return incident.is_new === true || incident.is_read === false;
+}
+
+/** Operator may forward only at `reached` (POST .../forward/). */
+export function canForwardIncident(current: string): boolean {
+  return normalizeIncidentStatus(current) === "reached";
+}
+
+/** First open / mark-read should move `routed` → `dispatched`. */
+export function shouldAcknowledgeOnOpen(incident: Incident): boolean {
+  const s = normalizeIncidentStatus(incident.status);
+  return s === "routed" || isUnread(incident);
+}
+
+/** Operator never PATCHes en_route / reached / served / resolved. */
+export function getOperatorPrimaryNextStatus(_incident: Incident): IncidentStatus | null {
+  return null;
+}
+
+export function isUnitFieldStatus(status: string): boolean {
+  return UNIT_FIELD_STATUSES.has(normalizeIncidentStatus(status));
+}
+
+/** At `dispatched`, operator must assign a unit before field work begins. */
+export function needsUnitAssignment(incident: Incident): boolean {
+  return (
+    normalizeIncidentStatus(incident.status) === "dispatched" &&
+    !incident.assigned_unit
+  );
+}
+
+/** Waiting for citizen feedback or unit manual close. */
+export function isAwaitingClosure(status: string): boolean {
+  return normalizeIncidentStatus(status) === "served";
+}
+
+/** Show field-unit guidance while unit is on an active assignment. */
+export function isFieldProgressByUnit(incident: Incident): boolean {
+  if (!incident.assigned_unit) return false;
+  const s = normalizeIncidentStatus(incident.status);
+  return s === "dispatched" || UNIT_FIELD_STATUSES.has(s);
+}
+
+export function getOperatorWorkflowHint(incident: Incident): string | null {
+  const s = normalizeIncidentStatus(incident.status);
+  if (s === "pending") {
+    return "System is processing the citizen report.";
+  }
+  if (s === "routed") {
+    return "Opening this incident acknowledges and dispatches it to your station.";
+  }
+  if (needsUnitAssignment(incident)) {
+    return "Assign a response unit to send the field team.";
+  }
+  if (
+    incident.assigned_unit &&
+    normalizeIncidentStatus(incident.status) === "dispatched"
+  ) {
+    return "Unit assigned — field team marks en route from the unit app.";
+  }
+  if (isFieldProgressByUnit(incident) && UNIT_FIELD_STATUSES.has(s)) {
+    return "Response unit updates en route, on scene, and served via the field app.";
+  }
+  if (isAwaitingClosure(s)) {
+    return "Awaiting citizen feedback or unit closure to resolve.";
+  }
+  return null;
+}
+
+export function canAssignUnit(incident: Incident): boolean {
+  if (isTerminalStatus(incident.status)) return false;
+  return !incident.assigned_unit;
+}
+
+export function canDetachUnit(incident: Incident): boolean {
+  return Boolean(incident.assigned_unit) && !isTerminalStatus(incident.status);
+}
+
+export function shouldShowUnitTracking(incident: Incident): boolean {
+  if (!incident.assigned_unit) return false;
+  const s = normalizeIncidentStatus(incident.status);
+  return s === "dispatched" || UNIT_FIELD_STATUSES.has(s);
+}
+
+/** @deprecated Use isFieldProgressByUnit */
+export function isFieldStatusManagedByUnit(incident: Incident): boolean {
+  return isFieldProgressByUnit(incident);
+}
+
+/** @deprecated Operator does not advance the primary chain */
+export function getPrimaryNextStatus(_current: string): IncidentStatus | null {
+  return null;
+}
+
+/** @deprecated Operator does not advance the primary chain */
+export function getPrimaryNextLabel(_current: string): string {
+  return "";
 }

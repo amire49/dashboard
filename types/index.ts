@@ -91,6 +91,54 @@ export interface AssignedStation {
   city: string;
 }
 
+export type ResponseUnitType = "individual" | "team";
+
+export interface AssignedUnitBrief {
+  id: string;
+  name: string;
+  unit_type: ResponseUnitType;
+  is_active?: boolean;
+  is_on_assignment?: boolean;
+}
+
+export interface ResponseUnit extends AssignedUnitBrief {
+  station_id?: string;
+  station_name?: string;
+  notes?: string;
+  login_user_id?: string;
+  login_phone?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateResponseUnitPayload {
+  name: string;
+  unit_type: ResponseUnitType;
+  phone: string;
+  email: string;
+  full_name?: string;
+  password?: string;
+  notes?: string;
+}
+
+export interface CreateResponseUnitResponse extends ResponseUnit {
+  temporary_password?: string;
+}
+
+export interface UnitLocationPing {
+  latitude: string | number;
+  longitude: string | number;
+  location_accuracy_m?: number | null;
+  recorded_at?: string;
+}
+
+export interface UnitTrackingResponse {
+  incident_id: string;
+  assigned_unit: AssignedUnitBrief | null;
+  latest_location: UnitLocationPing | null;
+  pings: UnitLocationPing[];
+}
+
 export interface Incident {
   id: string;
   category: IncidentType;
@@ -119,6 +167,8 @@ export interface Incident {
   audio_url?: string;
   // assignment
   assigned_station?: AssignedStation | null;
+  assigned_unit?: AssignedUnitBrief | null;
+  unit_assigned_at?: string | null;
   distance_to_station_km?: number | null;
   // timestamps
   created_at: string;
@@ -131,6 +181,54 @@ export interface Incident {
 export interface IncidentsListResponse {
   data: Incident[];
   unread_count?: number;
+}
+
+export interface IncidentForwardMeta {
+  id: string;
+  kind: "manual_nearest" | "manual_station" | "auto_timeout" | string;
+  to_station_id: string;
+  to_station_name: string;
+  to_station_type: string;
+}
+
+export interface IncidentForwardResponse extends Incident {
+  forward?: IncidentForwardMeta;
+}
+
+export interface IncidentForwardingSettings {
+  undispatched_forward_minutes: number;
+  updated_at?: string;
+}
+
+export interface StationNonResponseStat extends Station {
+  type_display?: string;
+  non_response_count: number;
+}
+
+export interface StationNonResponseStatsResponse {
+  undispatched_forward_minutes: number;
+  total_non_responses: number;
+  data: StationNonResponseStat[];
+}
+
+export interface IncidentForwardHistoryEntry {
+  id: string;
+  incident_id: string;
+  kind: string;
+  target_service_type?: string;
+  reason?: string;
+  from_station?: string;
+  from_station_name?: string;
+  to_station?: string;
+  to_station_name?: string;
+  initiated_by?: string | null;
+  initiated_by_name?: string | null;
+  created_at: string;
+}
+
+export interface IncidentForwardHistoryResponse {
+  total: number;
+  data: IncidentForwardHistoryEntry[];
 }
 
 export interface LoginRequest {
