@@ -14,6 +14,7 @@ import {
   ClipboardList,
   ChevronRight,
   Truck,
+  ArrowRightLeft,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -25,11 +26,12 @@ interface SidebarProps {
 }
 
 const adminLinks = [
-  { href: "/admin",           label: "Dashboard",  icon: LayoutDashboard },
-  { href: "/admin/stations",  label: "Stations",   icon: Building2 },
-  { href: "/admin/operators", label: "Operators",  icon: Users },
-  { href: "/admin/citizens",  label: "Citizens",   icon: UserCheck },
-  { href: "/admin/kyc",       label: "KYC Review", icon: ClipboardList },
+  { href: "/admin",                        label: "Dashboard",           icon: LayoutDashboard },
+  { href: "/admin/stations",               label: "Stations",            icon: Building2 },
+  { href: "/admin/operators",              label: "Operators",           icon: Users },
+  { href: "/admin/incident-forwarding",    label: "Incident forwarding", icon: ArrowRightLeft },
+  { href: "/admin/citizens",               label: "Citizens",            icon: UserCheck },
+  { href: "/admin/kyc",                    label: "KYC Review",          icon: ClipboardList },
 ];
 
 const operatorLinks = [
@@ -45,11 +47,11 @@ const adminSections = [
   },
   {
     label: "Management",
-    links: [adminLinks[1], adminLinks[2]],
+    links: [adminLinks[1], adminLinks[2], adminLinks[3]],
   },
   {
     label: "Citizens",
-    links: [adminLinks[3], adminLinks[4]],
+    links: [adminLinks[4], adminLinks[5]],
   },
 ];
 
