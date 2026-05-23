@@ -152,19 +152,27 @@ function AudioPlayer({ url }: { url: string }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setReady(false);
+    setError(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
 
     const fetchAudio = async () => {
       try {
-        // Use the correct storage key (eras_access_token, not access_token).
         const token = getAccessToken();
         if (!token) {
           setError("Authentication required to play audio");
+          setLoading(false);
           return;
         }
 
@@ -184,13 +192,28 @@ function AudioPlayer({ url }: { url: string }) {
 
         const audio = new Audio(blobUrl);
         audio.preload = "metadata";
-        audio.addEventListener("loadedmetadata", () => setDuration(audio.duration));
+        const markReady = () => {
+          if (cancelled) return;
+          if (audio.duration && isFinite(audio.duration)) {
+            setDuration(audio.duration);
+          }
+          setReady(true);
+          setLoading(false);
+        };
+        audio.addEventListener("loadedmetadata", markReady);
+        audio.addEventListener("canplay", markReady, { once: true });
         audio.addEventListener("timeupdate", () => setCurrentTime(audio.currentTime));
         audio.addEventListener("ended", () => { setIsPlaying(false); setCurrentTime(0); });
-        audio.addEventListener("error", () => setError("Unable to play audio file."));
+        audio.addEventListener("error", () => {
+          setError("Unable to play audio file.");
+          setLoading(false);
+        });
         audioRef.current = audio;
       } catch {
-        if (!cancelled) setError("Unable to load audio. Please try again.");
+        if (!cancelled) {
+          setError("Unable to load audio. Please try again.");
+          setLoading(false);
+        }
       }
     };
 
@@ -200,15 +223,15 @@ function AudioPlayer({ url }: { url: string }) {
       cancelled = true;
       audioRef.current?.pause();
       if (audioRef.current) audioRef.current.src = "";
+      audioRef.current = null;
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
     };
-    // Re-fetch only when the URL changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !ready) return;
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
@@ -220,7 +243,7 @@ function AudioPlayer({ url }: { url: string }) {
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !ready) return;
     const t = parseFloat(e.target.value);
     audio.currentTime = t;
     setCurrentTime(t);
@@ -239,12 +262,31 @@ function AudioPlayer({ url }: { url: string }) {
     );
   }
 
+  if (loading) {
+    return (
+      <div
+        className="mt-1 flex items-center gap-3 rounded-lg border border-border bg-muted/5 px-3 py-2"
+        aria-busy="true"
+        aria-label="Loading audio recording"
+      >
+        <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-muted" />
+        <div className="flex-1 space-y-2">
+          <div className="h-1 w-full animate-pulse rounded-full bg-muted" />
+          <div className="flex justify-between">
+            <div className="h-2.5 w-7 animate-pulse rounded bg-muted" />
+            <div className="h-2.5 w-7 animate-pulse rounded bg-muted" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-1 flex items-center gap-3 rounded-lg border border-border bg-muted/5 px-3 py-2">
       <button
         onClick={togglePlay}
-        disabled={!audioRef.current || duration === 0}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:bg-primary/90"
+        disabled={!ready}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
       >
         {isPlaying ? <IconPlayerPause size={16} stroke={1.5} /> : <IconPlayerPlay size={16} stroke={1.5} className="ml-0.5" />}
       </button>
@@ -252,8 +294,8 @@ function AudioPlayer({ url }: { url: string }) {
         <input
           type="range" min="0" max={duration || 0} value={currentTime}
           onChange={handleSeek}
-          disabled={!audioRef.current || duration === 0}
-          className="w-full h-1 bg-muted rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0"
+          disabled={!ready}
+          className="w-full h-1 bg-muted rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0"
         />
         <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
           <span>{formatTime(currentTime)}</span>
