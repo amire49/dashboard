@@ -7,8 +7,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+  --font-sans: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -104,30 +104,30 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    font-family: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "ss01", "ss02", "cv01", "cv02";
+    font-family: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
   }
 
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
     font-size: 14px;
     line-height: 1.6;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.011em;
   }
 
   /* ── Headings ── */
   h1 {
     font-size: 1.5rem;
     font-weight: 700;
-    line-height: 1.25;
-    letter-spacing: -0.03em;
+    line-height: 1.2;
+    letter-spacing: -0.032em;
   }
   h2 {
     font-size: 1.25rem;
     font-weight: 600;
     line-height: 1.3;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.028em;
   }
   h3 {
     font-size: 1rem;
@@ -138,9 +138,10 @@
 
   /* ── Monospace ── */
   code, kbd, pre, .font-mono {
-    font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+    font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
     font-size: 0.875em;
-    letter-spacing: 0;
+    letter-spacing: -0.01em;
+    font-feature-settings: "zero", "ss02";
   }
 
   /* ── Scrollbar ── */
@@ -176,18 +177,28 @@
 /* ── Utility: tighter tracking for UI labels ── */
 @layer utilities {
   .tracking-ui {
-    letter-spacing: -0.015em;
+    letter-spacing: -0.013em;
   }
   .text-label {
     font-size: 0.6875rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--muted-foreground);
   }
   .text-data {
-    font-family: var(--font-ibm-plex-mono), monospace;
+    font-family: var(--font-geist-mono), "Geist Mono", monospace;
     font-size: 0.8125rem;
-    letter-spacing: 0;
+    letter-spacing: -0.01em;
+    font-feature-settings: "zero", "ss02";
+  }
+}
+
+@keyframes toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
   }
 }

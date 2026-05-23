@@ -1,40 +1,96 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  Bell,
+  CheckCircle2,
+  Info,
+  Siren,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+
+export type ToastVariant =
+  | "default"
+  | "success"
+  | "error"
+  | "warning"
+  | "info"
+  | "emergency";
 
 export interface ToastProps {
   id: string;
   title?: string;
   description?: string;
-  variant?: "default" | "success" | "error" | "warning" | "info";
+  variant?: ToastVariant;
   exiting?: boolean;
+  duration?: number;
+  /** Stack position for enter animation stagger */
+  index?: number;
   onClose?: () => void;
 }
 
-const variantStyles: Record<NonNullable<ToastProps["variant"]>, string> = {
-  default: "bg-card border-border text-foreground",
-  success: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
-  error:   "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800",
-  warning: "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800",
-  info:    "bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
-};
-
-const variantIconStyles: Record<NonNullable<ToastProps["variant"]>, string> = {
-  default: "text-foreground",
-  success: "text-green-600 dark:text-green-400",
-  error:   "text-red-600 dark:text-red-400",
-  warning: "text-amber-600 dark:text-amber-400",
-  info:    "text-blue-600 dark:text-blue-400",
-};
-
-const VariantIcon: Record<NonNullable<ToastProps["variant"]>, React.ElementType> = {
-  default: Info,
-  success: CheckCircle2,
-  error:   AlertCircle,
-  warning: AlertTriangle,
-  info:    Info,
+const variantConfig: Record<
+  ToastVariant,
+  {
+    card: string;
+    accent: string;
+    iconWrap: string;
+    icon: string;
+    progress: string;
+    Icon: React.ElementType;
+  }
+> = {
+  default: {
+    card: "bg-card/95 border-border/80 text-foreground shadow-xl shadow-black/5",
+    accent: "bg-foreground/80",
+    iconWrap: "bg-muted",
+    icon: "text-foreground",
+    progress: "bg-foreground/30",
+    Icon: Bell,
+  },
+  success: {
+    card: "bg-card/95 border-emerald-200/80 text-foreground shadow-xl shadow-emerald-500/10",
+    accent: "bg-emerald-500",
+    iconWrap: "bg-emerald-500/12",
+    icon: "text-emerald-600",
+    progress: "bg-emerald-500/50",
+    Icon: CheckCircle2,
+  },
+  error: {
+    card: "bg-card/95 border-red-200/80 text-foreground shadow-xl shadow-red-500/10",
+    accent: "bg-red-500",
+    iconWrap: "bg-red-500/12",
+    icon: "text-red-600",
+    progress: "bg-red-500/50",
+    Icon: AlertCircle,
+  },
+  warning: {
+    card: "bg-card/95 border-amber-200/80 text-foreground shadow-xl shadow-amber-500/10",
+    accent: "bg-amber-500",
+    iconWrap: "bg-amber-500/12",
+    icon: "text-amber-600",
+    progress: "bg-amber-500/50",
+    Icon: AlertTriangle,
+  },
+  info: {
+    card: "bg-card/95 border-blue-200/80 text-foreground shadow-xl shadow-blue-500/10",
+    accent: "bg-blue-500",
+    iconWrap: "bg-blue-500/12",
+    icon: "text-blue-600",
+    progress: "bg-blue-500/50",
+    Icon: Info,
+  },
+  emergency: {
+    card: "bg-card/95 border-red-300/90 text-foreground shadow-2xl shadow-red-500/20 ring-1 ring-red-500/20",
+    accent: "bg-red-600",
+    iconWrap: "bg-red-500/15",
+    icon: "text-red-600",
+    progress: "bg-red-600/60",
+    Icon: Siren,
+  },
 };
 
 export function Toast({
@@ -43,57 +99,126 @@ export function Toast({
   description,
   variant = "default",
   exiting = false,
+  duration = 5000,
+  index = 0,
   onClose,
 }: ToastProps) {
-  const Icon = VariantIcon[variant];
+  const cfg = variantConfig[variant];
+  const Icon = cfg.Icon;
+  const showProgress = duration > 0 && !exiting;
 
   return (
     <div
       role="alert"
-      aria-live={variant === "error" ? "assertive" : "polite"}
+      aria-live={variant === "error" || variant === "emergency" ? "assertive" : "polite"}
       aria-atomic="true"
+      style={{ animationDelay: exiting ? undefined : `${index * 60}ms` }}
       className={cn(
-        "pointer-events-auto w-full max-w-sm rounded-xl border shadow-lg p-4",
+        "pointer-events-auto relative w-full overflow-hidden rounded-2xl border backdrop-blur-md",
         exiting
-          ? "animate-out slide-out-to-right-5 fade-out duration-300 fill-mode-forwards"
-          : "animate-in slide-in-from-right-5 fade-in duration-300",
-        variantStyles[variant]
+          ? "animate-out slide-out-to-right-8 fade-out zoom-out-95 duration-300 fill-mode-forwards"
+          : "animate-in slide-in-from-right-8 fade-in zoom-in-95 duration-400 fill-mode-backwards",
+        cfg.card
       )}
     >
-      <div className="flex items-start gap-3">
-        <Icon
-          className={cn("mt-0.5 h-4 w-4 shrink-0", variantIconStyles[variant])}
-          aria-hidden="true"
-        />
-        <div className="flex-1 min-w-0">
+      {/* Left accent */}
+      <div
+        className={cn(
+          "absolute left-0 top-0 h-full w-1",
+          cfg.accent,
+          variant === "emergency" && !exiting && "animate-pulse"
+        )}
+      />
+
+      <div className="flex items-start gap-3 p-4 pl-5">
+        <div
+          className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+            cfg.iconWrap,
+            variant === "emergency" && !exiting && "animate-pulse"
+          )}
+        >
+          <Icon className={cn("h-5 w-5", cfg.icon)} aria-hidden="true" />
+        </div>
+
+        <div className="min-w-0 flex-1 pt-0.5">
+          {variant === "emergency" && (
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-red-600">
+              Emergency alert
+            </p>
+          )}
           {title && (
-            <p className="font-semibold text-sm leading-tight">{title}</p>
+            <p className="text-sm font-semibold leading-snug tracking-tight">{title}</p>
           )}
           {description && (
-            <p className={cn("text-sm", title ? "mt-0.5 text-muted-foreground" : "")}>{description}</p>
+            <p
+              className={cn(
+                "text-sm leading-relaxed text-muted-foreground",
+                title && "mt-1"
+              )}
+            >
+              {description}
+            </p>
           )}
         </div>
+
         {onClose && (
           <button
+            type="button"
             onClick={onClose}
             aria-label="Dismiss notification"
-            className="shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+            className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-4 w-4" />
           </button>
         )}
       </div>
+
+      {showProgress && (
+        <div className="h-0.5 w-full bg-muted/50">
+          <div
+            key={`${_id}-progress`}
+            className={cn("h-full origin-left", cfg.progress)}
+            style={{
+              animation: `toast-progress ${duration}ms linear forwards`,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-export function ToastContainer({ children }: { children: React.ReactNode }) {
+export function ToastContainer({
+  children,
+  count,
+  onDismissAll,
+}: {
+  children: React.ReactNode;
+  count?: number;
+  onDismissAll?: () => void;
+}) {
   return (
     <div
       aria-label="Notifications"
-      className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none w-full max-w-sm"
+      className="fixed top-4 right-4 z-[9999] flex w-[min(100vw-2rem,24rem)] flex-col gap-3 pointer-events-none sm:top-5 sm:right-5"
     >
-      {children}
+      {(count ?? 0) > 1 && onDismissAll && (
+        <div className="pointer-events-auto flex items-center justify-between rounded-xl border border-border/60 bg-card/90 px-3 py-2 shadow-lg backdrop-blur-md">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Bell className="h-3.5 w-3.5" />
+            <span>{count} notifications</span>
+          </div>
+          <button
+            type="button"
+            onClick={onDismissAll}
+            className="text-xs font-semibold text-primary transition-opacity hover:opacity-80"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+      <div className="flex flex-col gap-3">{children}</div>
     </div>
   );
 }

@@ -46,6 +46,8 @@ export type BackendIncidentPayload = {
   amharic_text?: string;
   english_text?: string;
   audio_url?: string;
+  is_read?: boolean;
+  is_new?: boolean;
 };
 
 export type BackendWSMessage =

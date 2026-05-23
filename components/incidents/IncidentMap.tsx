@@ -5,9 +5,15 @@ import type { Incident } from "@/types";
 
 // Status → marker color
 const STATUS_COLOR: Record<string, string> = {
+  pending:     "#9ca3af",
   routed:      "#ef4444",
+  dispatched:  "#f97316",
+  en_route:    "#eab308",
+  reached:     "#a855f7",
+  served:      "#22c55e",
+  resolved:    "#14b8a6",
+  false_alarm: "#6b7280",
   in_progress: "#eab308",
-  resolved:    "#22c55e",
 };
 
 function markerColor(status: string): string {

@@ -68,7 +68,16 @@ export interface OperatorDashboardData {
 }
 
 export type IncidentType = "fire" | "medical" | "crime" | "police" | string;
-export type IncidentStatus = "routed" | "in_progress" | "resolved" | string;
+export type IncidentStatus =
+  | "pending"
+  | "routed"
+  | "dispatched"
+  | "en_route"
+  | "reached"
+  | "served"
+  | "resolved"
+  | "false_alarm"
+  | string;
 
 export interface AssignedStation {
   id: string;
@@ -114,10 +123,14 @@ export interface Incident {
   // timestamps
   created_at: string;
   updated_at?: string;
+  // read state (operator list/detail)
+  is_read?: boolean;
+  is_new?: boolean;
 }
 
 export interface IncidentsListResponse {
   data: Incident[];
+  unread_count?: number;
 }
 
 export interface LoginRequest {

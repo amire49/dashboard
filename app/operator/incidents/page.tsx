@@ -3,11 +3,36 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import {
-  Siren, AlertTriangle, CheckCircle, Clock, Filter,
-  X, MapPin, User, FileText, Tag, ChevronRight,
-  ArrowRight, Loader2, List, Map, Volume2, Building2,
-  Navigation, RefreshCw, Activity, TrendingUp, Play, Pause, Wifi, WifiOff,
-} from "lucide-react";
+  IconAlertHexagon,
+  IconRadar,
+  IconRefresh,
+  IconLayoutList,
+  IconMap2,
+  IconChartBar,
+  IconProgress,
+  IconCircleCheck,
+  IconAdjustmentsHorizontal,
+  IconTag,
+  IconUser,
+  IconBuildingHospital,
+  IconActivity,
+  IconClockHour4,
+  IconStethoscope,
+  IconShield,
+  IconFlame,
+  IconCircleDashed,
+  IconX,
+  IconChevronRight,
+  IconInboxOff,
+  IconMapPin,
+  IconFileText,
+  IconVolume,
+  IconNavigation,
+  IconPlayerPlay,
+  IconPlayerPause,
+  IconLoader2,
+  IconMail,
+} from "@tabler/icons-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,13 +49,22 @@ import { getAccessToken } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/lib/useToast";
 import { useIncidentSocket } from "@/lib/useIncidentSocket";
-import type { Incident } from "@/types";
+import {
+  normalizeIncidentStatus,
+  getPrimaryNextStatus,
+  getPrimaryNextLabel,
+  canMarkFalseAlarm,
+  isTerminalStatus,
+  isAutoOnlyStatus,
+  isUnread,
+} from "@/lib/incident-workflow";
+import type { Incident, IncidentStatus } from "@/types";
 
 const IncidentMap = dynamic(() => import("@/components/incidents/IncidentMap"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center rounded-xl bg-muted/30">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <IconLoader2 size={24} stroke={1.5} className="animate-spin text-muted-foreground" />
     </div>
   ),
 });
@@ -39,13 +73,23 @@ const InlineMap = dynamic(() => import("@/components/incidents/InlineMap"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center bg-muted/30">
-      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <IconLoader2 size={20} stroke={1.5} className="animate-spin text-muted-foreground" />
     </div>
   ),
 });
 
 const INCIDENT_CATEGORIES = ["all", "fire", "medical", "police", "crime"] as const;
-const INCIDENT_STATUSES   = ["all", "routed", "in_progress", "resolved"] as const;
+const INCIDENT_STATUSES = [
+  "all",
+  "pending",
+  "routed",
+  "dispatched",
+  "en_route",
+  "reached",
+  "served",
+  "resolved",
+  "false_alarm",
+] as const;
 
 type FilterCategory = (typeof INCIDENT_CATEGORIES)[number];
 type FilterStatus   = (typeof INCIDENT_STATUSES)[number];
@@ -71,21 +115,18 @@ class IncidentsErrorBoundary extends React.Component<
         <div className="flex h-screen overflow-hidden">
           <Sidebar role="operator" />
           <main className="flex-1 overflow-y-auto bg-background p-6">
-            <div className="flex items-center gap-4 rounded-xl border p-5" style={{
-              borderColor: "#ef444433", backgroundColor: "#ef444408",
-            }}>
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl"
-                style={{ backgroundColor: "#ef444415", color: "#ef4444" }}>
-                <AlertTriangle className="h-5 w-5" />
+            <div className="flex items-center gap-4 rounded-xl border border-red-200 bg-red-50 p-5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100">
+                <IconAlertHexagon size={20} stroke={1.5} className="text-red-600" />
               </div>
               <div className="flex-1">
-                <p className="font-semibold" style={{ color: "#ef4444" }}>Something went wrong</p>
+                <p className="font-semibold text-red-600">Something went wrong</p>
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   An unexpected error occurred. Please refresh the page.
                 </p>
               </div>
               <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                <IconRefresh size={16} stroke={1.5} className="mr-1.5" />
                 Reload
               </Button>
             </div>
@@ -197,7 +238,7 @@ function AudioPlayer({ url }: { url: string }) {
         disabled={!audioRef.current || duration === 0}
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:bg-primary/90"
       >
-        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+        {isPlaying ? <IconPlayerPause size={16} stroke={1.5} /> : <IconPlayerPlay size={16} stroke={1.5} className="ml-0.5" />}
       </button>
       <div className="flex-1">
         <input
@@ -217,77 +258,112 @@ function AudioPlayer({ url }: { url: string }) {
 
 // ── Status / Category helpers ─────────────────────────────────────────────────
 
-function normalizeStatus(s: string) {
-  return s.toLowerCase().replace(/\s+/g, "_");
-}
-
-function nextStatus(current: string): "in_progress" | "resolved" | null {
-  const s = normalizeStatus(current);
-  if (s === "routed")      return "in_progress";
-  if (s === "in_progress") return "resolved";
-  return null;
-}
-
-function nextStatusLabel(current: string) {
-  const n = nextStatus(current);
-  if (n === "in_progress") return "Mark In Progress";
-  if (n === "resolved")    return "Mark Resolved";
-  return "";
+function statusFilterLabel(s: FilterStatus): string {
+  if (s === "all") return "All Statuses";
+  return s.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const s = normalizeStatus(status);
-  if (s === "routed")
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-500 ring-1 ring-red-500/20">
-        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-        Routed
-      </span>
-    );
-  if (s === "in_progress")
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset"
-        style={{
-          backgroundColor: "color-mix(in oklch, var(--chart-4) 12%, transparent)",
-          color: "var(--chart-4)",
-        }}>
-        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "var(--chart-4)" }} />
-        In Progress
-      </span>
-    );
-  if (s === "resolved")
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset"
-        style={{
-          backgroundColor: "color-mix(in oklch, var(--chart-2) 12%, transparent)",
-          color: "var(--chart-2)",
-        }}>
-        <CheckCircle className="h-3 w-3" />
-        Resolved
-      </span>
-    );
-  return <Badge variant="outline">{status}</Badge>;
+  const s = normalizeIncidentStatus(status);
+  
+  const statusConfig: Record<string, { bg: string; text: string; border: string; dot: string; label: string }> = {
+    pending: { 
+      bg: "bg-gray-50", 
+      text: "text-gray-500", 
+      border: "border-gray-200", 
+      dot: "bg-gray-500",
+      label: "Pending"
+    },
+    routed: { 
+      bg: "bg-red-50", 
+      text: "text-red-600", 
+      border: "border-red-200", 
+      dot: "bg-red-600",
+      label: "Routed"
+    },
+    dispatched: { 
+      bg: "bg-orange-50", 
+      text: "text-orange-600", 
+      border: "border-orange-200", 
+      dot: "bg-orange-600",
+      label: "Dispatched"
+    },
+    en_route: { 
+      bg: "bg-yellow-50", 
+      text: "text-yellow-700", 
+      border: "border-yellow-200", 
+      dot: "bg-yellow-700",
+      label: "En Route"
+    },
+    reached: { 
+      bg: "bg-purple-50", 
+      text: "text-purple-600", 
+      border: "border-purple-200", 
+      dot: "bg-purple-600",
+      label: "Reached"
+    },
+    served: { 
+      bg: "bg-green-50", 
+      text: "text-green-600", 
+      border: "border-green-200", 
+      dot: "bg-green-600",
+      label: "Served"
+    },
+    resolved: { 
+      bg: "bg-teal-50", 
+      text: "text-teal-700", 
+      border: "border-teal-200", 
+      dot: "bg-teal-700",
+      label: "Resolved"
+    },
+    false_alarm: { 
+      bg: "bg-gray-50", 
+      text: "text-gray-500", 
+      border: "border-gray-200", 
+      dot: "bg-gray-500",
+      label: "False Alarm"
+    },
+    in_progress: { 
+      bg: "bg-yellow-50", 
+      text: "text-yellow-700", 
+      border: "border-yellow-200", 
+      dot: "bg-yellow-700",
+      label: "In Progress"
+    },
+  };
+
+  const config = statusConfig[s] || statusConfig.pending;
+  
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${config.bg} ${config.text} ${config.border}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${config.dot} ${s === 'routed' ? 'animate-pulse' : ''}`} />
+      {config.label}
+    </span>
+  );
 }
 
-const CATEGORY_CONFIG: Record<string, { color: string; icon: string }> = {
-  fire:    { color: "#ef4444", icon: "🔥" },
-  medical: { color: "#3b82f6", icon: "🏥" },
-  police:  { color: "#8b5cf6", icon: "🚔" },
-  crime:   { color: "#8b5cf6", icon: "⚠️" },
+const CATEGORY_CONFIG: Record<string, { color: string; bgColor: string; borderColor: string; icon: React.ElementType }> = {
+  fire:    { color: "text-red-600", bgColor: "bg-red-50", borderColor: "border-red-200", icon: IconFlame },
+  medical: { color: "text-green-600", bgColor: "bg-green-50", borderColor: "border-green-200", icon: IconStethoscope },
+  police:  { color: "text-blue-600", bgColor: "bg-blue-50", borderColor: "border-blue-200", icon: IconShield },
+  crime:   { color: "text-blue-600", bgColor: "bg-blue-50", borderColor: "border-blue-200", icon: IconShield },
 };
 
 function CategoryBadge({ category }: { category: string }) {
   const key = category?.toLowerCase() ?? "";
-  const cfg = CATEGORY_CONFIG[key];
-  const color = cfg?.color ?? "#6b7280";
+  const cfg = CATEGORY_CONFIG[key] || { 
+    color: "text-gray-500", 
+    bgColor: "bg-gray-50", 
+    borderColor: "border-gray-200", 
+    icon: IconCircleDashed
+  };
+  
+  const Icon = cfg.icon;
+  
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize"
-      style={{
-        backgroundColor: `${color}18`, color,
-        border: `1px solid ${color}33`,
-      }}>
-      {cfg?.icon && <span className="text-[10px]">{cfg.icon}</span>}
-      {category ?? "Unknown"}
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold capitalize border ${cfg.bgColor} ${cfg.color} ${cfg.borderColor}`}>
+      <Icon size={14} stroke={1.5} />
+      {category ?? "None"}
     </span>
   );
 }
@@ -318,31 +394,63 @@ function latLng(incident: Incident): [number, number] | null {
 
 // ── Stat Cards ────────────────────────────────────────────────────────────────
 
-function StatCards({ incidents }: { incidents: Incident[] }) {
-  const total      = incidents.length;
-  const routed     = incidents.filter(i => normalizeStatus(i.status) === "routed").length;
-  const inProgress = incidents.filter(i => normalizeStatus(i.status) === "in_progress").length;
-  const resolved   = incidents.filter(i => normalizeStatus(i.status) === "resolved").length;
+function StatCards({ incidents, unreadCount }: { incidents: Incident[]; unreadCount: number }) {
+  const total = incidents.length;
+  const active = incidents.filter(i => {
+    const s = normalizeIncidentStatus(i.status);
+    return s === "dispatched" || s === "en_route" || s === "reached";
+  }).length;
+  const closed = incidents.filter(i => {
+    const s = normalizeIncidentStatus(i.status);
+    return s === "resolved" || s === "served" || s === "false_alarm";
+  }).length;
 
   const stats = [
-    { label: "Total",       value: total,      icon: Activity,      color: "var(--primary)" },
-    { label: "Routed",      value: routed,      icon: AlertTriangle, color: "#ef4444" },
-    { label: "In Progress", value: inProgress,  icon: TrendingUp,    color: "var(--chart-4)" },
-    { label: "Resolved",    value: resolved,    icon: CheckCircle,   color: "var(--chart-2)" },
+    {
+      label: "Total",
+      value: total,
+      icon: IconChartBar,
+      bgColor: "bg-blue-50",
+      iconColor: "text-blue-600",
+      borderColor: "border-blue-200",
+    },
+    {
+      label: "Unread",
+      value: unreadCount,
+      icon: IconMail,
+      bgColor: "bg-indigo-50",
+      iconColor: "text-indigo-600",
+      borderColor: "border-indigo-200",
+    },
+    {
+      label: "Active",
+      value: active,
+      icon: IconProgress,
+      bgColor: "bg-yellow-50",
+      iconColor: "text-yellow-700",
+      borderColor: "border-yellow-200",
+    },
+    {
+      label: "Closed",
+      value: closed,
+      icon: IconCircleCheck,
+      bgColor: "bg-green-50",
+      iconColor: "text-green-600",
+      borderColor: "border-green-200",
+    },
   ];
 
   return (
-    <div className="mb-6 grid grid-cols-4 gap-3">
-      {stats.map(({ label, value, icon: Icon, color }) => (
-        <Card key={label} className="border-0 shadow-sm">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-              style={{ backgroundColor: `color-mix(in oklch, ${color} 12%, transparent)`, color }}>
-              <Icon className="h-4 w-4" />
+    <div className="mb-6 grid grid-cols-4 gap-4">
+      {stats.map(({ label, value, icon: Icon, bgColor, iconColor, borderColor }) => (
+        <Card key={label} className={`border ${borderColor} shadow-sm hover:shadow-md transition-shadow`}>
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${bgColor}`}>
+              <Icon size={24} stroke={1.5} className={iconColor} />
             </div>
             <div>
-              <p className="font-mono text-xl font-bold leading-none">{value}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
+              <p className="font-mono text-3xl font-bold leading-none">{value}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{label}</p>
             </div>
           </CardContent>
         </Card>
@@ -430,14 +538,14 @@ function ErrorBanner({ onRetry }: { onRetry: () => void }) {
     }}>
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
         style={{ backgroundColor: "#ef444415", color: "#ef4444" }}>
-        <AlertTriangle className="h-5 w-5" />
+        <IconAlertHexagon size={20} stroke={1.5} />
       </div>
       <div className="flex-1">
         <p className="font-semibold" style={{ color: "#ef4444" }}>Failed to load incidents</p>
         <p className="mt-0.5 text-sm text-muted-foreground">Could not reach the server. Check your connection and try again.</p>
       </div>
       <Button variant="outline" size="sm" onClick={onRetry} className="shrink-0 gap-1.5">
-        <RefreshCw className="h-3.5 w-3.5" />
+        <IconRefresh size={16} stroke={1.5} />
         Retry
       </Button>
     </div>
@@ -446,16 +554,16 @@ function ErrorBanner({ onRetry }: { onRetry: () => void }) {
 
 function EmptyState({ isFiltered }: { isFiltered: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center py-24 text-center">
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl"
-        style={{ backgroundColor: isFiltered ? "var(--muted)" : "color-mix(in oklch, var(--chart-2) 12%, transparent)" }}>
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl"
+        style={{ backgroundColor: isFiltered ? "var(--muted)" : "rgb(220 252 231)" }}>
         {isFiltered
-          ? <Filter className="h-7 w-7 text-muted-foreground" />
-          : <CheckCircle className="h-7 w-7" style={{ color: "var(--chart-2)" }} />}
+          ? <IconAdjustmentsHorizontal size={36} stroke={1.5} className="text-muted-foreground" />
+          : <IconCircleCheck size={36} stroke={1.5} className="text-green-600" />}
       </div>
-      <p className="text-base font-semibold">{isFiltered ? "No matching incidents" : "All clear"}</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {isFiltered ? "Try adjusting or clearing your filters" : "No incidents have been routed to your station yet"}
+      <p className="text-xl font-bold mb-2">{isFiltered ? "No matching incidents" : "All clear"}</p>
+      <p className="text-sm text-muted-foreground max-w-md">
+        {isFiltered ? "Try adjusting or clearing your filters" : "No incidents assigned to your station"}
       </p>
     </div>
   );
@@ -470,7 +578,7 @@ function DetailField({ icon: Icon, label, children }: {
     <div className="flex gap-3">
       <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
         style={{ backgroundColor: "color-mix(in oklch, var(--primary) 10%, transparent)", color: "var(--primary)" }}>
-        <Icon className="h-3.5 w-3.5" />
+        <Icon size={16} stroke={1.5} />
       </div>
       <div className="min-w-0 flex-1">
         <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
@@ -494,18 +602,25 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
   // Use the global toast singleton instead of local state.
   const { success, error: toastError } = useToast();
 
-  const cfg = CATEGORY_CONFIG[data.category?.toLowerCase()] ?? { color: "var(--primary)", icon: "" };
+  const cfg = CATEGORY_CONFIG[data.category?.toLowerCase()] ?? {
+    color: "var(--primary)",
+    bgColor: "",
+    borderColor: "",
+    icon: IconAlertHexagon,
+  };
   const coords = latLng(data);
-  const next = nextStatus(data.status);
+  const primaryNext = getPrimaryNextStatus(data.status);
+  const showFalseAlarm = canMarkFalseAlarm(data.status);
+  const autoOnly = isAutoOnlyStatus(data.status);
+  const terminal = isTerminalStatus(data.status);
 
-  async function handleStatusUpdate() {
-    if (!next) return;
+  async function patchStatus(status: IncidentStatus) {
     setUpdating(true);
-    const res = await incidentsAPI.updateStatus(data.id, next);
+    const res = await incidentsAPI.updateStatus(data.id, status);
     setUpdating(false);
     if (res) {
       onStatusUpdate(res);
-      success("Status Updated", `Moved to "${next.replace("_", " ")}"`);
+      success("Status Updated", `Moved to "${status.replace(/_/g, " ")}"`);
     } else {
       toastError("Update Failed", "Could not update status. Try again.");
     }
@@ -519,7 +634,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl text-base"
             style={{ backgroundColor: `${cfg.color}18`, border: `1px solid ${cfg.color}33` }}>
-            {cfg.icon || <Siren className="h-4 w-4" style={{ color: cfg.color }} />}
+            <cfg.icon size={16} stroke={1.5} style={{ color: cfg.color }} />
           </div>
           <div>
             <p className="text-[10px] font-mono text-muted-foreground">#{String(data.id).slice(0, 8).toUpperCase()}</p>
@@ -528,7 +643,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
         </div>
         <button onClick={onClose}
           className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-          <X className="h-4 w-4" />
+          <IconX size={16} stroke={1.5} />
         </button>
       </div>
 
@@ -536,7 +651,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
       <div className="shrink-0 flex items-center gap-2.5 px-5 py-2.5 border-b"
         style={{ borderColor: "var(--border)", backgroundColor: "var(--muted)" }}>
         <StatusBadge status={data.status} />
-        {normalizeStatus(data.status) === "routed" && (
+        {normalizeIncidentStatus(data.status) === "routed" && (
           <span className="text-xs text-red-500 font-medium">Requires immediate attention</span>
         )}
       </div>
@@ -553,7 +668,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
           <div className="divide-y" style={{ borderColor: "var(--border)" }}>
 
             <div className="px-5 py-4">
-              <DetailField icon={Tag} label="Emergency Category">
+              <DetailField icon={IconTag} label="Emergency Category">
                 <div className="flex items-center gap-2 flex-wrap">
                   <CategoryBadge category={data.category} />
                   {data.confidence != null && (
@@ -566,13 +681,13 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
             </div>
 
             <div className="px-5 py-4">
-              <DetailField icon={Clock} label="Time Reported">
+              <DetailField icon={IconClockHour4} label="Time Reported">
                 <span className="font-mono text-sm">{formatTimeFull(data.created_at)}</span>
               </DetailField>
             </div>
 
             <div className="px-5 py-4">
-              <DetailField icon={User} label="Reported By">
+              <DetailField icon={IconUser} label="Reported By">
                 <p className="font-semibold">{data.reporter?.full_name ?? "Unknown"}</p>
                 {data.reporter?.phone && (
                   <p className="mt-0.5 text-xs text-muted-foreground">{data.reporter.phone}</p>
@@ -581,7 +696,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
             </div>
 
             <div className="px-5 py-4">
-              <DetailField icon={MapPin} label="Location">
+              <DetailField icon={IconMapPin} label="Location">
                 {coords ? (
                   <div className="space-y-2">
                     <p className="font-mono text-xs text-muted-foreground">
@@ -596,10 +711,10 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
                         border: `1px solid ${showMap ? `${cfg.color}30` : "var(--border)"}`,
                       }}>
                       <span className="flex items-center gap-1.5">
-                        <MapPin className="h-3 w-3" />
+                        <IconMapPin size={14} stroke={1.5} />
                         {showMap ? "Hide map" : "View on map"}
                       </span>
-                      <ChevronRight className={`h-3 w-3 transition-transform duration-200 ${showMap ? "rotate-90" : ""}`} />
+                      <IconChevronRight size={14} stroke={1.5} className={`transition-transform duration-200 ${showMap ? "rotate-90" : ""}`} />
                     </button>
                     {showMap && (
                       <div className="overflow-hidden rounded-xl border" style={{ height: 220, borderColor: "var(--border)" }}>
@@ -615,14 +730,14 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
 
             {data.assigned_station && (
               <div className="px-5 py-4">
-                <DetailField icon={Building2} label="Assigned Station">
+                <DetailField icon={IconBuildingHospital} label="Assigned Station">
                   <p className="font-semibold">{data.assigned_station.name}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground capitalize">
                     {data.assigned_station.type_display ?? data.assigned_station.type} · {data.assigned_station.city}
                   </p>
                   {data.distance_to_station_km != null && (
                     <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      <Navigation className="h-3 w-3" />
+                      <IconNavigation size={14} stroke={1.5} />
                       {data.distance_to_station_km.toFixed(1)} km away
                     </span>
                   )}
@@ -640,13 +755,13 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
                         style={{ backgroundColor: cfg.color, color: "white" }}
                       >
                         <div className="flex items-center gap-2">
-                          <Navigation className="h-4 w-4" />
+                          <IconNavigation size={16} stroke={1.5} />
                           <div className="text-left">
                             <div>Get Directions to Incident</div>
                             <div className="text-xs font-normal opacity-90">From {data.assigned_station.name}</div>
                           </div>
                         </div>
-                        <ChevronRight className="h-4 w-4" />
+                        <IconChevronRight size={16} stroke={1.5} />
                       </a>
                       <button
                         onClick={() => {
@@ -671,14 +786,14 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
 
             {data.audio_url && (
               <div className="px-5 py-4">
-                <DetailField icon={Volume2} label="Audio Recording">
+                <DetailField icon={IconVolume} label="Audio Recording">
                   <AudioPlayer url={data.audio_url} />
                 </DetailField>
               </div>
             )}
 
             <div className="px-5 py-4">
-              <DetailField icon={FileText} label="Transcription">
+              <DetailField icon={IconFileText} label="Transcription">
                 {data.amharic_text || data.english_text ? (
                   <div className="mt-1 space-y-2">
                     {data.amharic_text && (
@@ -706,23 +821,51 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
         )}
       </div>
 
-      {/* Footer action */}
+      {/* Footer actions */}
       {!loadingDetail && (
-        <div className="shrink-0 border-t p-4" style={{ borderColor: "var(--border)" }}>
-          {next ? (
-            <Button className="w-full gap-2 rounded-xl" disabled={updating} onClick={handleStatusUpdate}
-              style={next === "resolved"
-                ? { backgroundColor: "color-mix(in oklch, var(--chart-2) 85%, transparent)", color: "white" }
-                : undefined}>
-              {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-              {updating ? "Updating…" : nextStatusLabel(data.status)}
-            </Button>
-          ) : (
+        <div className="shrink-0 space-y-2 border-t p-4" style={{ borderColor: "var(--border)" }}>
+          {autoOnly && (
+            <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
+              style={{ backgroundColor: "var(--muted)" }}>
+              <IconRadar size={16} stroke={1.5} />
+              Open incident to acknowledge and dispatch
+            </div>
+          )}
+          {terminal && (
             <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium"
               style={{ backgroundColor: "color-mix(in oklch, var(--chart-2) 10%, transparent)", color: "var(--chart-2)" }}>
-              <CheckCircle className="h-3.5 w-3.5" />
-              Incident resolved — no further actions
+              <IconCircleCheck size={16} stroke={1.5} />
+              No further actions
             </div>
+          )}
+          {!autoOnly && !terminal && (
+            <>
+              {primaryNext && (
+                <Button
+                  className="w-full gap-2 rounded-xl"
+                  disabled={updating}
+                  onClick={() => patchStatus(primaryNext)}
+                  style={
+                    primaryNext === "resolved"
+                      ? { backgroundColor: "color-mix(in oklch, var(--chart-2) 85%, transparent)", color: "white" }
+                      : undefined
+                  }
+                >
+                  {updating ? <IconLoader2 size={16} stroke={1.5} className="animate-spin" /> : <IconChevronRight size={16} stroke={1.5} />}
+                  {updating ? "Updating…" : getPrimaryNextLabel(data.status)}
+                </Button>
+              )}
+              {showFalseAlarm && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 rounded-xl"
+                  disabled={updating}
+                  onClick={() => patchStatus("false_alarm")}
+                >
+                  Mark False Alarm
+                </Button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -741,10 +884,13 @@ function IncidentsPageInner() {
   const [view, setView] = useState<"list" | "map">("list");
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
+  const [markingReadId, setMarkingReadId] = useState<string | null>(null);
 
   const {
     incidents,
     setIncidents,
+    unreadCount,
+    setUnreadCount,
     loading,
     fetchError,
     isConnected,
@@ -758,11 +904,26 @@ function IncidentsPageInner() {
     },
   });
 
+  const applyIncidentUpdate = useCallback((updated: Incident) => {
+    setIncidents((prev) =>
+      prev.map((i) => (i.id === updated.id ? { ...i, ...updated } : i))
+    );
+    setSelected((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+    setDetail((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+  }, [setIncidents]);
+
   function openDetail(incident: Incident) {
+    const wasUnread = isUnread(incident);
     setSelected(incident);
     setDetail(null);
     setLoadingDetail(true);
     incidentsAPI.get(incident.id).then((res) => {
+      if (res) {
+        applyIncidentUpdate(res);
+        if (wasUnread) {
+          setUnreadCount((c) => Math.max(0, c - 1));
+        }
+      }
       setDetail(res);
       setLoadingDetail(false);
     });
@@ -773,16 +934,29 @@ function IncidentsPageInner() {
     setDetail(null);
   }
 
+  async function handleMarkRead(e: React.MouseEvent, incident: Incident) {
+    e.stopPropagation();
+    if (incident.is_read) return;
+    setMarkingReadId(incident.id);
+    const wasUnread = isUnread(incident);
+    const res = await incidentsAPI.markRead(incident.id);
+    setMarkingReadId(null);
+    if (res) {
+      applyIncidentUpdate(res);
+      if (wasUnread) {
+        setUnreadCount((c) => Math.max(0, c - 1));
+      }
+    }
+  }
+
   function handleStatusUpdate(updated: Incident) {
-    setIncidents(prev => prev.map(i => i.id === updated.id ? { ...i, status: updated.status } : i));
-    setSelected(prev => prev ? { ...prev, status: updated.status } : prev);
-    setDetail(prev => prev ? { ...prev, ...updated } : updated);
+    applyIncidentUpdate(updated);
   }
 
   const filtered = useMemo(() => {
     return incidents
       .filter(i => categoryFilter === "all" || i.category?.toLowerCase() === categoryFilter)
-      .filter(i => statusFilter === "all" || normalizeStatus(i.status) === statusFilter)
+      .filter(i => statusFilter === "all" || normalizeIncidentStatus(i.status) === statusFilter)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [incidents, categoryFilter, statusFilter]);
 
@@ -797,7 +971,7 @@ function IncidentsPageInner() {
         <Sidebar role="operator" />
         <main className="flex-1 overflow-y-auto bg-background p-6">
           <div className="mb-6 flex items-center gap-3">
-            <Siren className="h-7 w-7" style={{ color: "var(--primary)" }} />
+            <IconAlertHexagon size={28} stroke={1.5} className="text-primary" />
             <h1 className="text-2xl font-bold">Incidents</h1>
           </div>
           <ErrorBanner onRetry={refresh} />
@@ -813,45 +987,46 @@ function IncidentsPageInner() {
 
         {/* Page header */}
         <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl"
-              style={{ backgroundColor: "color-mix(in oklch, var(--primary) 12%, transparent)", color: "var(--primary)" }}>
-              <Siren className="h-5 w-5" />
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 border border-red-200">
+              <IconAlertHexagon size={24} stroke={1.5} className="text-red-600 animate-pulse" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Incidents</h1>
-              <div className="flex items-center gap-2">
-                <p className="text-sm text-muted-foreground">{incidents.length} total</p>
-                <span className="flex items-center gap-1 text-xs">
-                  {isConnected ? (
-                    <>
-                      <Wifi className="h-3 w-3 text-green-600" />
-                      <span className="text-green-600 font-medium">Live</span>
-                    </>
-                  ) : (
-                    <>
-                      <WifiOff className="h-3 w-3 text-amber-600" />
-                      <span className="text-amber-600 font-medium">Offline</span>
-                    </>
+              <h1 className="text-3xl font-bold tracking-tight">Incidents</h1>
+              <div className="flex items-center gap-3 mt-1">
+                <p className="text-sm text-muted-foreground font-mono">
+                  {incidents.length} total
+                  {unreadCount > 0 && (
+                    <span className="ml-2 font-semibold text-indigo-600">
+                      · {unreadCount} unread
+                    </span>
                   )}
+                </p>
+                <span className="flex items-center gap-1.5">
+                  <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-600 animate-pulse' : 'bg-amber-600'}`} />
+                  <IconRadar size={14} stroke={1.5} className={isConnected ? 'text-green-600' : 'text-amber-600'} />
+                  <span className={`text-xs font-medium ${isConnected ? 'text-green-600' : 'text-amber-600'}`}>
+                    {isConnected ? 'Live' : 'Offline'}
+                  </span>
                 </span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={refresh} className="gap-1.5 rounded-lg">
-              <RefreshCw className="h-3.5 w-3.5" />
+            <Button variant="outline" size="sm" onClick={refresh} className="gap-2 rounded-lg">
+              <IconRefresh size={16} stroke={1.5} />
               Refresh
             </Button>
-            <div className="flex items-center rounded-xl p-1 gap-0.5" style={{ backgroundColor: "var(--muted)" }}>
+            <div className="flex items-center rounded-lg border bg-muted/50 p-1">
               {(["list", "map"] as const).map(v => (
                 <button key={v} onClick={() => setView(v)}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all"
-                  style={view === v
-                    ? { backgroundColor: "var(--card)", color: "var(--foreground)", boxShadow: "0 1px 3px rgba(0,0,0,.12)" }
-                    : { color: "var(--muted-foreground)" }}>
-                  {v === "list" ? <List className="h-3.5 w-3.5" /> : <Map className="h-3.5 w-3.5" />}
+                  className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                    view === v 
+                      ? 'bg-background text-foreground shadow-sm' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}>
+                  {v === "list" ? <IconLayoutList size={16} stroke={1.5} /> : <IconMap2 size={16} stroke={1.5} />}
                   {v.charAt(0).toUpperCase() + v.slice(1)}
                 </button>
               ))}
@@ -859,7 +1034,7 @@ function IncidentsPageInner() {
           </div>
         </div>
 
-        <StatCards incidents={incidents} />
+        <StatCards incidents={incidents} unreadCount={unreadCount} />
 
         {/* Map view */}
         {view === "map" && (
@@ -875,15 +1050,14 @@ function IncidentsPageInner() {
             <div className={selected ? "col-span-7" : "col-span-12"}>
 
               {/* Filter bar */}
-              <Card className="mb-4 border-0 shadow-sm rounded-xl">
-                <CardContent className="flex flex-wrap items-center gap-2.5 p-3.5">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg"
-                    style={{ backgroundColor: "var(--muted)" }}>
-                    <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+              <Card className="mb-4 border shadow-sm rounded-xl">
+                <CardContent className="flex flex-wrap items-center gap-3 p-4">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                    <IconAdjustmentsHorizontal size={16} stroke={1.5} className="text-muted-foreground" />
                   </div>
                   <Select value={categoryFilter} onValueChange={v => setCategoryFilter(v as FilterCategory)}>
-                    <SelectTrigger className="h-8 w-36 rounded-lg text-xs">
-                      <SelectValue placeholder="Category" />
+                    <SelectTrigger className="h-9 w-44 rounded-lg">
+                      <SelectValue placeholder="All Categories" />
                     </SelectTrigger>
                     <SelectContent>
                       {INCIDENT_CATEGORIES.map(c => (
@@ -894,33 +1068,33 @@ function IncidentsPageInner() {
                     </SelectContent>
                   </Select>
                   <Select value={statusFilter} onValueChange={v => setStatusFilter(v as FilterStatus)}>
-                    <SelectTrigger className="h-8 w-40 rounded-lg text-xs">
-                      <SelectValue placeholder="Status" />
+                    <SelectTrigger className="h-9 w-44 rounded-lg">
+                      <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
                     <SelectContent>
                       {INCIDENT_STATUSES.map(s => (
                         <SelectItem key={s} value={s}>
-                          {s === "all" ? "All Statuses" : s === "in_progress" ? "In Progress" : s.charAt(0).toUpperCase() + s.slice(1)}
+                          {statusFilterLabel(s)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   {isFiltered && (
                     <button onClick={() => { setCategoryFilter("all"); setStatusFilter("all"); }}
-                      className="rounded-lg px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                      className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                       Clear filters
                     </button>
                   )}
-                  <span className="ml-auto text-xs text-muted-foreground">
+                  <span className="ml-auto text-sm font-mono text-muted-foreground">
                     {filtered.length} result{filtered.length !== 1 ? "s" : ""}
                   </span>
                 </CardContent>
               </Card>
 
               {/* Incident table */}
-              <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
-                <CardHeader className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
-                  <CardTitle className="text-base">Incident List</CardTitle>
+              <Card className="border shadow-sm rounded-xl overflow-hidden">
+                <CardHeader className="px-6 py-4 border-b bg-muted/30">
+                  <CardTitle className="text-lg font-bold">Incident List</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   {filtered.length === 0 ? (
@@ -928,40 +1102,70 @@ function IncidentsPageInner() {
                   ) : (
                     <Table>
                       <TableHeader>
-                        <TableRow style={{ backgroundColor: "var(--muted)" }}>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide">Category</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide">Reporter</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide">Station</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide">Status</TableHead>
-                          <TableHead className="text-xs font-semibold uppercase tracking-wide">
-                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Time</span>
-                          </TableHead>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableHead className="text-xs font-bold uppercase tracking-wider">Category</TableHead>
+                          <TableHead className="text-xs font-bold uppercase tracking-wider">Reporter</TableHead>
+                          <TableHead className="text-xs font-bold uppercase tracking-wider">Station</TableHead>
+                          <TableHead className="text-xs font-bold uppercase tracking-wider">Status</TableHead>
+                          <TableHead className="text-xs font-bold uppercase tracking-wider">Time</TableHead>
+                          <TableHead className="w-12 text-xs font-bold uppercase tracking-wider" />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filtered.map(incident => {
-                          const isRouted = normalizeStatus(incident.status) === "routed";
+                          const isRouted = normalizeIncidentStatus(incident.status) === "routed";
+                          const unread = isUnread(incident);
                           const isSelected = selected?.id === incident.id;
                           return (
                             <TableRow key={incident.id} onClick={() => openDetail(incident)}
-                              className="cursor-pointer transition-colors"
+                              className={`cursor-pointer transition-all hover:bg-muted/50 ${
+                                isSelected ? "bg-muted" : isRouted ? "bg-red-50/30" : unread ? "bg-indigo-50/40" : ""
+                              } ${unread ? "font-semibold" : ""}`}
                               style={{
-                                backgroundColor: isSelected ? "var(--muted)" : isRouted ? "#ef444406" : undefined,
-                                borderLeft: isRouted ? "3px solid #ef4444" : "3px solid transparent",
+                                borderLeft: isRouted
+                                  ? "4px solid rgb(220, 38, 38)"
+                                  : unread
+                                    ? "4px solid rgb(79, 70, 229)"
+                                    : "4px solid transparent",
                               }}>
-                              <TableCell className="py-3.5"><CategoryBadge category={incident.category} /></TableCell>
-                              <TableCell className="py-3.5">
-                                <p className="text-sm font-medium">{incident.reporter?.full_name ?? "—"}</p>
+                              <TableCell className="py-4 pl-4">
+                                <div className="flex items-center gap-2">
+                                  {isRouted && <span className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />}
+                                  {unread && !isRouted && (
+                                    <span className="h-2 w-2 rounded-full bg-indigo-600" title="Unread" />
+                                  )}
+                                  <CategoryBadge category={incident.category} />
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-4">
+                                <p className="text-sm font-semibold">{incident.reporter?.full_name ?? "—"}</p>
                                 {incident.reporter?.phone && (
-                                  <p className="text-xs text-muted-foreground">{incident.reporter.phone}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">{incident.reporter.phone}</p>
                                 )}
                               </TableCell>
-                              <TableCell className="py-3.5 text-sm text-muted-foreground">
+                              <TableCell className="py-4 text-sm text-muted-foreground">
                                 {incident.assigned_station?.name ?? "—"}
                               </TableCell>
-                              <TableCell className="py-3.5"><StatusBadge status={incident.status} /></TableCell>
-                              <TableCell className="py-3.5 font-mono text-xs text-muted-foreground">
+                              <TableCell className="py-4"><StatusBadge status={incident.status} /></TableCell>
+                              <TableCell className="py-4 font-mono text-sm text-muted-foreground">
                                 {formatTime(incident.created_at)}
+                              </TableCell>
+                              <TableCell className="py-4 pr-4">
+                                {!incident.is_read && (
+                                  <button
+                                    type="button"
+                                    title="Mark as read"
+                                    disabled={markingReadId === incident.id}
+                                    onClick={(e) => handleMarkRead(e, incident)}
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-indigo-600 transition-colors hover:bg-indigo-50 disabled:opacity-50"
+                                  >
+                                    {markingReadId === incident.id ? (
+                                      <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                                    ) : (
+                                      <IconMail size={16} stroke={1.5} />
+                                    )}
+                                  </button>
+                                )}
                               </TableCell>
                             </TableRow>
                           );

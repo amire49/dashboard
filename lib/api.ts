@@ -166,22 +166,34 @@ function incidentsArrayFromListBody(body: unknown): Incident[] | null {
   return null;
 }
 
+function unreadCountFromListBody(body: unknown): number | undefined {
+  if (body === null || body === undefined || typeof body !== "object") return undefined;
+  const n = (body as Record<string, unknown>).unread_count;
+  return typeof n === "number" ? n : undefined;
+}
+
 export const incidentsAPI = {
   async list(): Promise<IncidentsListResponse | null> {
     const body = await request<unknown>("/api/operator/incidents/");
     if (body === null) return null;
     const data = incidentsArrayFromListBody(body);
     if (data === null) return null;
-    return { data };
+    return { data, unread_count: unreadCountFromListBody(body) };
   },
 
   get(id: string) {
     return request<Incident>(`/api/operator/incidents/${id}/`);
   },
 
-  updateStatus(id: string, status: string) {
-    return request<Incident>(`/api/operator/incidents/${id}/update-status/`, {
+  markRead(id: string) {
+    return request<Incident>(`/api/operator/incidents/${id}/read/`, {
       method: "POST",
+    });
+  },
+
+  updateStatus(id: string, status: string) {
+    return request<Incident>(`/api/operator/incidents/${id}/status/`, {
+      method: "PATCH",
       body: JSON.stringify({ status }),
     });
   },

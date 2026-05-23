@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Toast, ToastContainer } from "@/components/ui/toast";
+import { Toast, ToastContainer, type ToastVariant } from "@/components/ui/toast";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -15,7 +15,7 @@ export interface ToastItem {
   id: string;
   title?: string;
   description?: string;
-  variant?: "default" | "success" | "error" | "warning" | "info";
+  variant?: ToastVariant;
   duration?: number;
   /** Set internally when the toast is being dismissed (triggers exit animation). */
   exiting?: boolean;
@@ -30,6 +30,7 @@ interface ToastContextValue {
   error: (title: string, description?: string) => string;
   warning: (title: string, description?: string) => string;
   info: (title: string, description?: string) => string;
+  emergency: (title: string, description?: string) => string;
 }
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -38,12 +39,13 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 const MAX_VISIBLE_TOASTS = 5;
 const EXIT_ANIMATION_MS = 300;
+const DEFAULT_DURATION = 5000;
+const EMERGENCY_DURATION = 8000;
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  // Map from toast id → auto-dismiss timeout handle.
   const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const removeFromList = useCallback((id: string) => {
@@ -53,19 +55,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const dismiss = useCallback(
     (id: string) => {
-      // 1. Clear any pending auto-dismiss timer.
       const existing = timeoutsRef.current.get(id);
       if (existing) {
         clearTimeout(existing);
         timeoutsRef.current.delete(id);
       }
 
-      // 2. Mark the toast as exiting so the CSS exit animation plays.
       setToasts((prev) =>
         prev.map((t) => (t.id === id ? { ...t, exiting: true } : t))
       );
 
-      // 3. Remove from the list after the animation finishes.
       const exit = setTimeout(() => removeFromList(id), EXIT_ANIMATION_MS);
       timeoutsRef.current.set(id, exit);
     },
@@ -83,19 +82,28 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       title,
       description,
       variant = "default",
-      duration = 5000,
+      duration,
     }: Omit<ToastItem, "id" | "exiting">) => {
       const id =
         typeof crypto !== "undefined" && "randomUUID" in crypto
           ? crypto.randomUUID()
           : Math.random().toString(36).slice(2);
 
-      const newToast: ToastItem = { id, title, description, variant, duration };
+      const resolvedDuration =
+        duration ??
+        (variant === "emergency" ? EMERGENCY_DURATION : DEFAULT_DURATION);
+
+      const newToast: ToastItem = {
+        id,
+        title,
+        description,
+        variant,
+        duration: resolvedDuration,
+      };
 
       setToasts((prev) => {
         const next = [newToast, ...prev];
         if (next.length > MAX_VISIBLE_TOASTS) {
-          // Silently drop oldest toasts that overflow the cap.
           const dropped = next.slice(MAX_VISIBLE_TOASTS);
           dropped.forEach((t) => {
             const handle = timeoutsRef.current.get(t.id);
@@ -109,8 +117,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
 
-      if (duration > 0) {
-        const handle = setTimeout(() => dismiss(id), duration);
+      if (resolvedDuration > 0) {
+        const handle = setTimeout(() => dismiss(id), resolvedDuration);
         timeoutsRef.current.set(id, handle);
       }
 
@@ -136,18 +144,40 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
   const info = useCallback(
     (title: string, description?: string) =>
-      toast({ title, description, variant: "info" }),
+      toast({ title, description, variant: "info", duration: 4000 }),
+    [toast]
+  );
+  const emergency = useCallback(
+    (title: string, description?: string) =>
+      toast({ title, description, variant: "emergency" }),
     [toast]
   );
 
+  const activeCount = toasts.filter((t) => !t.exiting).length;
+
   return (
     <ToastContext.Provider
-      value={{ toasts, toast, dismiss, dismissAll, success, error, warning, info }}
+      value={{
+        toasts,
+        toast,
+        dismiss,
+        dismissAll,
+        success,
+        error,
+        warning,
+        info,
+        emergency,
+      }}
     >
       {children}
-      <ToastContainer>
-        {toasts.map((t) => (
-          <Toast key={t.id} {...t} onClose={() => dismiss(t.id)} />
+      <ToastContainer count={activeCount} onDismissAll={dismissAll}>
+        {toasts.map((t, index) => (
+          <Toast
+            key={t.id}
+            {...t}
+            index={index}
+            onClose={() => dismiss(t.id)}
+          />
         ))}
       </ToastContainer>
     </ToastContext.Provider>
