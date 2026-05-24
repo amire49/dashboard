@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Truck,
   ArrowRightLeft,
+  KeyRound,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ const operatorLinks = [
   { href: "/operator",           label: "Dashboard", icon: LayoutDashboard },
   { href: "/operator/incidents", label: "Incidents", icon: Siren },
   { href: "/operator/units",     label: "Response units", icon: Truck },
+  { href: "/operator/settings",  label: "Settings", icon: KeyRound },
 ];
 
 const adminSections = [

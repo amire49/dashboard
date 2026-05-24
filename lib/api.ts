@@ -188,7 +188,7 @@ export const authAPI = {
   },
 
   changePassword(data: { old_password: string; new_password: string }) {
-    return request<{ detail: string }>("/api/auth/change-password/", {
+    return requestWithError<{ detail: string }>("/api/auth/change-password/", {
       method: "POST",
       body: JSON.stringify(data),
     });
