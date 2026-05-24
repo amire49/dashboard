@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Users, Plus, Trash2, KeyRound, Copy, Check, AlertTriangle, X, Loader2 } from "lucide-react";
+import { Users, Plus, Trash2, KeyRound, Copy, Check, AlertTriangle, X, Loader2, ArrowRightLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import Sidebar from "@/components/layout/Sidebar";
 import { operatorsAPI, stationsAPI } from "@/lib/api";
+import { useToast } from "@/lib/useToast";
 import type { Operator, Station } from "@/types";
 
 // ── Inline delete confirmation ────────────────────────────────────────────────
@@ -85,6 +86,7 @@ function DeleteConfirm({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function OperatorsPage() {
+  const { success, error: toastError } = useToast();
   const [operators, setOperators] = useState<Operator[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +97,9 @@ export default function OperatorsPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
+  const [reassignOperator, setReassignOperator] = useState<Operator | null>(null);
+  const [reassignStationId, setReassignStationId] = useState("");
+  const [reassigning, setReassigning] = useState(false);
 
   const [form, setForm] = useState({
     full_name: "", phone: "", email: "", station_id: "",
@@ -161,6 +166,46 @@ export default function OperatorsPage() {
 
   function updateField(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  const activeStations = stations.filter((s) => s.is_active ?? true);
+
+  function reassignTargetsFor(op: Operator) {
+    return activeStations.filter((s) => s.id !== op.station?.id);
+  }
+
+  function openReassign(op: Operator) {
+    setReassignOperator(op);
+    setReassignStationId("");
+  }
+
+  async function handleReassign(e: React.FormEvent) {
+    e.preventDefault();
+    if (!reassignOperator || !reassignStationId) return;
+
+    if (reassignOperator.station?.id === reassignStationId) {
+      toastError("Same station", "Choose a different active station.");
+      return;
+    }
+
+    setReassigning(true);
+    const { data, error } = await operatorsAPI.reassignStation(reassignOperator.id, {
+      station_id: reassignStationId,
+    });
+    setReassigning(false);
+
+    if (error || !data) {
+      toastError("Reassign failed", error ?? "Could not reassign operator.");
+      return;
+    }
+
+    success(
+      "Station updated",
+      `${reassignOperator.full_name} is now assigned to ${data.station?.name ?? "the new station"}.`
+    );
+    setReassignOperator(null);
+    setReassignStationId("");
+    await fetchOperators();
   }
 
   return (
@@ -292,6 +337,93 @@ export default function OperatorsPage() {
           </DialogContent>
         </Dialog>
 
+        {/* Reassign station modal */}
+        <Dialog
+          open={reassignOperator !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setReassignOperator(null);
+              setReassignStationId("");
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-[440px]">
+            <DialogHeader>
+              <DialogTitle>Reassign station</DialogTitle>
+              <DialogDescription>
+                Move {reassignOperator?.full_name} to a different active station.
+              </DialogDescription>
+            </DialogHeader>
+            {reassignOperator && (
+              <form onSubmit={handleReassign} className="space-y-4">
+                <div className="rounded-lg border border-border bg-muted/5 px-4 py-3 text-sm">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Current station
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {reassignOperator.station?.name ?? "Unassigned"}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-wide">
+                    New station
+                  </Label>
+                  {reassignTargetsFor(reassignOperator).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No other active stations available.
+                    </p>
+                  ) : (
+                    <Select
+                      value={reassignStationId}
+                      onValueChange={setReassignStationId}
+                      required
+                    >
+                      <SelectTrigger className="h-9 rounded-lg">
+                        <SelectValue placeholder="Select a station" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px] overflow-y-auto">
+                        {reassignTargetsFor(reassignOperator).map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name} ({s.type})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-lg"
+                    onClick={() => {
+                      setReassignOperator(null);
+                      setReassignStationId("");
+                    }}
+                    disabled={reassigning}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={
+                      reassigning ||
+                      reassignTargetsFor(reassignOperator).length === 0 ||
+                      !reassignStationId
+                    }
+                    className="gap-2 rounded-lg"
+                  >
+                    {reassigning && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {reassigning ? "Reassigning…" : "Reassign"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* Table */}
         {loading ? (
           <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
@@ -382,6 +514,21 @@ export default function OperatorsPage() {
                         />
                       ) : (
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 rounded-lg text-xs"
+                            onClick={() => openReassign(op)}
+                            disabled={reassignTargetsFor(op).length === 0}
+                            title={
+                              reassignTargetsFor(op).length === 0
+                                ? "No other active stations"
+                                : "Move to another station"
+                            }
+                          >
+                            <ArrowRightLeft className="h-3 w-3" />
+                            Reassign
+                          </Button>
                           <Button variant="outline" size="sm" className="gap-1.5 rounded-lg text-xs"
                             onClick={() => handleResetPassword(op.id)}>
                             <KeyRound className="h-3 w-3" />

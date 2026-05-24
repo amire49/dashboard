@@ -472,6 +472,16 @@ export const operatorsAPI = {
       { method: "POST" }
     );
   },
+
+  reassignStation(id: string, data: { station_id: string }) {
+    return requestWithError<Operator>(
+      `/api/admin/operators/${id}/reassign-station/`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    );
+  },
 };
 
 // ── Citizens API ───────────────────────────────────────────────────────────────
