@@ -113,8 +113,10 @@ export default function ForwardIncidentControls({
         Forward to another station
       </p>
       <p className="text-xs text-muted-foreground">
-        Available when status is <span className="font-medium">Reached</span>. Target
-        station receives the incident as new.
+        Forward while <span className="font-medium">routed</span> or{" "}
+        <span className="font-medium">dispatched</span> with no unit assigned. Not
+        available after a unit is en route. Target station receives it as{" "}
+        <span className="font-medium">routed</span>.
       </p>
 
       <Button

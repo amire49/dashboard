@@ -104,6 +104,7 @@ export default function OperatorsPage() {
   const [form, setForm] = useState({
     full_name: "", phone: "", email: "", station_id: "",
   });
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const fetchOperators = useCallback(async () => {
     setLoading(true);
@@ -125,17 +126,57 @@ export default function OperatorsPage() {
     return () => clearTimeout(t);
   }, [tempPassword]);
 
+  function formatCreateError(message: string): string {
+    const lower = message.toLowerCase();
+    if (
+      lower.includes("inactive") &&
+      (lower.includes("station") || lower.includes("station_id"))
+    ) {
+      return "The selected station is inactive. Activate it under Stations, or choose another active station.";
+    }
+    if (lower.includes("station") && (lower.includes("invalid") || lower.includes("not found"))) {
+      return "The selected station is not valid. Choose another station from the list.";
+    }
+    return message;
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    setSubmitting(true);
-    const result = await operatorsAPI.create(form);
-    if (result) {
-      setTempPassword(result.temporary_password);
-      setForm({ full_name: "", phone: "", email: "", station_id: "" });
-      setShowForm(false);
-      await fetchOperators();
+    setCreateError(null);
+
+    const selected = stations.find((s) => s.id === form.station_id);
+    if (selected && selected.is_active === false) {
+      const msg = formatCreateError("station_id: inactive station");
+      setCreateError(msg);
+      toastError("Inactive station", msg);
+      return;
     }
+
+    if (!form.station_id) {
+      const msg = "Please select a station.";
+      setCreateError(msg);
+      toastError("Station required", msg);
+      return;
+    }
+
+    setSubmitting(true);
+    const { data, error } = await operatorsAPI.create(form);
     setSubmitting(false);
+
+    if (data) {
+      const createdName = form.full_name.trim() || data.full_name || "Operator";
+      setTempPassword(data.temporary_password);
+      setForm({ full_name: "", phone: "", email: "", station_id: "" });
+      setCreateError(null);
+      setShowForm(false);
+      success("Operator created", `${createdName} was added successfully.`);
+      await fetchOperators();
+      return;
+    }
+
+    const msg = formatCreateError(error ?? "Could not create operator. Please try again.");
+    setCreateError(msg);
+    toastError("Could not create operator", msg);
   }
 
   async function handleResetPassword(id: string) {
@@ -195,7 +236,10 @@ export default function OperatorsPage() {
     setReassigning(false);
 
     if (error || !data) {
-      toastError("Reassign failed", error ?? "Could not reassign operator.");
+      toastError(
+        "Reassign failed",
+        formatCreateError(error ?? "Could not reassign operator.")
+      );
       return;
     }
 
@@ -258,7 +302,16 @@ export default function OperatorsPage() {
         )}
 
         {/* Add Operator Modal */}
-        <Dialog open={showForm} onOpenChange={setShowForm}>
+        <Dialog
+          open={showForm}
+          onOpenChange={(open) => {
+            setShowForm(open);
+            if (!open) {
+              setCreateError(null);
+              setForm({ full_name: "", phone: "", email: "", station_id: "" });
+            }
+          }}
+        >
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>New Operator</DialogTitle>
@@ -302,19 +355,42 @@ export default function OperatorsPage() {
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-semibold uppercase tracking-wide">Station</Label>
-                <Select value={form.station_id} onValueChange={v => updateField("station_id", v)} required>
-                  <SelectTrigger className="h-9 rounded-lg">
-                    <SelectValue placeholder="Select a station" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-muted [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50">
-                    {stations.map(s => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name} ({s.type})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {activeStations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No active stations available. Activate a station before adding an operator.
+                  </p>
+                ) : (
+                  <Select
+                    value={form.station_id}
+                    onValueChange={(v) => {
+                      setCreateError(null);
+                      updateField("station_id", v);
+                    }}
+                    required
+                  >
+                    <SelectTrigger className="h-9 rounded-lg">
+                      <SelectValue placeholder="Select an active station" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-muted [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50">
+                      {activeStations.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} ({s.type})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
+              {createError && (
+                <Alert
+                  variant="destructive"
+                  className="rounded-lg border-red-200 bg-red-50 text-red-900"
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle className="text-sm font-semibold">Could not create operator</AlertTitle>
+                  <AlertDescription className="text-sm">{createError}</AlertDescription>
+                </Alert>
+              )}
               <div className="flex justify-end gap-2 pt-2">
                 <Button 
                   type="button" 
@@ -328,7 +404,11 @@ export default function OperatorsPage() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={submitting} className="rounded-lg gap-2">
+                <Button
+                  type="submit"
+                  disabled={submitting || activeStations.length === 0}
+                  className="rounded-lg gap-2"
+                >
                   {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   {submitting ? "Creating..." : "Create Operator"}
                 </Button>

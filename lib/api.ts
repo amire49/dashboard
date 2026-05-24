@@ -211,8 +211,29 @@ export const stationsAPI = {
   },
 
   create(data: Omit<Station, "id" | "is_active">) {
-    return request<Station>("/api/admin/stations/", {
+    return requestWithError<Station>("/api/admin/stations/", {
       method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  update(
+    id: string,
+    data: Partial<{
+      name: string;
+      type: string;
+      phone: string;
+      email: string;
+      address: string;
+      city: string;
+      latitude: number;
+      longitude: number;
+      capacity: number;
+      is_active: boolean;
+    }>
+  ) {
+    return requestWithError<Station>(`/api/admin/stations/${id}/`, {
+      method: "PATCH",
       body: JSON.stringify(data),
     });
   },
@@ -449,10 +470,13 @@ export const operatorsAPI = {
     email: string;
     station_id: string;
   }) {
-    return request<CreateOperatorResponse>("/api/admin/operators/create/", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
+    return requestWithError<CreateOperatorResponse>(
+      "/api/admin/operators/create/",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
   },
 
   update(id: string, data: Partial<Operator>) {

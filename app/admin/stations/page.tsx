@@ -18,6 +18,8 @@ import {
   IconX,
   IconCheck,
   IconMail,
+  IconEdit,
+  IconLoader2,
 } from "@tabler/icons-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,6 +66,34 @@ const emptyForm = {
   capacity: "",
 };
 
+function stationToForm(station: Station) {
+  return {
+    name: station.name,
+    type: station.type,
+    phone: station.phone,
+    email: station.email,
+    address: station.address,
+    city: station.city,
+    latitude: String(station.latitude ?? station.lat ?? ""),
+    longitude: String(station.longitude ?? station.long ?? ""),
+    capacity: String(station.capacity),
+  };
+}
+
+function formToPayload(form: typeof emptyForm) {
+  return {
+    name: form.name,
+    type: form.type,
+    phone: form.phone,
+    email: form.email,
+    address: form.address,
+    city: form.city,
+    latitude: parseFloat(form.latitude) || 0,
+    longitude: parseFloat(form.longitude) || 0,
+    capacity: parseInt(form.capacity, 10) || 0,
+  };
+}
+
 export default function StationsPage() {
   const { success, error } = useToast();
   const [stations, setStations] = useState<Station[]>([]);
@@ -80,6 +110,10 @@ export default function StationsPage() {
     stationId: null,
     stationName: "",
   });
+  const [editingStation, setEditingStation] = useState<Station | null>(null);
+  const [editForm, setEditForm] = useState(emptyForm);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   async function fetchStations() {
     setLoading(true);
@@ -100,27 +134,65 @@ export default function StationsPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    const payload = {
-      name: form.name,
-      type: form.type,
-      phone: form.phone,
-      email: form.email,
-      address: form.address,
-      city: form.city,
-      latitude: parseFloat(form.latitude) || 0,
-      longitude: parseFloat(form.longitude) || 0,
-      capacity: parseInt(form.capacity, 10) || 0,
-    };
-    const result = await stationsAPI.create(payload);
-    if (result) {
+    const { data, error: apiError } = await stationsAPI.create(formToPayload(form));
+    setSubmitting(false);
+    if (data) {
       setForm(emptyForm);
       setShowAddForm(false);
       await fetchStations();
       success("Station Created", `${form.name} has been added successfully`);
     } else {
-      error("Creation Failed", "Failed to create station. Please try again.");
+      error("Creation Failed", apiError ?? "Failed to create station. Please try again.");
     }
-    setSubmitting(false);
+  }
+
+  function openEdit(station: Station) {
+    setEditingStation(station);
+    setEditForm(stationToForm(station));
+  }
+
+  async function handleUpdate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingStation) return;
+    setEditSubmitting(true);
+    const { data, error: apiError } = await stationsAPI.update(
+      editingStation.id,
+      formToPayload(editForm)
+    );
+    setEditSubmitting(false);
+    if (data) {
+      success("Station updated", `${data.name} was saved successfully.`);
+      setEditingStation(null);
+      setEditForm(emptyForm);
+      await fetchStations();
+    } else {
+      error("Update failed", apiError ?? "Could not update station. Please try again.");
+    }
+  }
+
+  async function handleToggleActive(station: Station) {
+    const nextActive = !station.is_active;
+    setTogglingId(station.id);
+    const { data, error: apiError } = await stationsAPI.update(station.id, {
+      is_active: nextActive,
+    });
+    setTogglingId(null);
+    if (data) {
+      success(
+        nextActive ? "Station activated" : "Station deactivated",
+        `${station.name} is now ${nextActive ? "active" : "inactive"}.`
+      );
+      await fetchStations();
+    } else {
+      error(
+        nextActive ? "Activation failed" : "Deactivation failed",
+        apiError ?? "Could not update station status."
+      );
+    }
+  }
+
+  function updateEditField(field: string, value: string) {
+    setEditForm((prev) => ({ ...prev, [field]: value }));
   }
 
   async function handleDelete(id: string) {
@@ -669,21 +741,68 @@ export default function StationsPage() {
 
                     {/* ACTIONS */}
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setDeleteDialog({
-                            open: true,
-                            stationId: station.id,
-                            stationName: station.name,
-                          })
-                        }
-                        disabled={deletingId === station.id}
-                        className="opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"
-                      >
-                        <IconTrash size={16} stroke={1.5} />
-                      </Button>
+                      <div className="flex items-center justify-end gap-0.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          title="Edit station"
+                          onClick={() => openEdit(station)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          <IconEdit size={16} stroke={1.5} />
+                        </Button>
+                        {station.is_active ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            title="Deactivate station"
+                            onClick={() => handleToggleActive(station)}
+                            disabled={togglingId === station.id}
+                            className="h-8 w-8 p-0 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                          >
+                            {togglingId === station.id ? (
+                              <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                            ) : (
+                              <IconCircleX size={16} stroke={1.5} />
+                            )}
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            title="Activate station"
+                            onClick={() => handleToggleActive(station)}
+                            disabled={togglingId === station.id}
+                            className="h-8 w-8 p-0 text-green-600 hover:bg-green-50 hover:text-green-700"
+                          >
+                            {togglingId === station.id ? (
+                              <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                            ) : (
+                              <IconCircleCheck size={16} stroke={1.5} />
+                            )}
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          title="Delete station"
+                          onClick={() =>
+                            setDeleteDialog({
+                              open: true,
+                              stationId: station.id,
+                              stationName: station.name,
+                            })
+                          }
+                          disabled={deletingId === station.id}
+                          className="h-8 w-8 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        >
+                          <IconTrash size={16} stroke={1.5} />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -699,6 +818,161 @@ export default function StationsPage() {
           </Card>
         )}
       </main>
+
+      {/* Edit Station Dialog */}
+      <Dialog
+        open={editingStation !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingStation(null);
+            setEditForm(emptyForm);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <IconEdit size={20} stroke={1.5} />
+              Edit station
+            </DialogTitle>
+            <DialogDescription>
+              Update details for {editingStation?.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdate} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Station name
+              </Label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => updateEditField("name", e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Type
+                </Label>
+                <Select
+                  value={editForm.type}
+                  onValueChange={(v) => updateEditField("type", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="police">Police</SelectItem>
+                    <SelectItem value="medical">Medical</SelectItem>
+                    <SelectItem value="fire">Fire</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  City
+                </Label>
+                <Input
+                  value={editForm.city}
+                  onChange={(e) => updateEditField("city", e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Phone
+                </Label>
+                <Input
+                  value={editForm.phone}
+                  onChange={(e) => updateEditField("phone", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Capacity
+                </Label>
+                <Input
+                  type="number"
+                  value={editForm.capacity}
+                  onChange={(e) => updateEditField("capacity", e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Email
+              </Label>
+              <Input
+                type="email"
+                value={editForm.email}
+                onChange={(e) => updateEditField("email", e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Address
+              </Label>
+              <Input
+                value={editForm.address}
+                onChange={(e) => updateEditField("address", e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Latitude
+                </Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={editForm.latitude}
+                  onChange={(e) => updateEditField("latitude", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Longitude
+                </Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={editForm.longitude}
+                  onChange={(e) => updateEditField("longitude", e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingStation(null);
+                  setEditForm(emptyForm);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={editSubmitting} className="gap-2 bg-red-600 hover:bg-red-700">
+                {editSubmitting ? (
+                  <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                ) : (
+                  <IconCheck size={16} stroke={1.5} />
+                )}
+                Save changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}>

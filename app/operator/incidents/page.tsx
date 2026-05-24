@@ -664,7 +664,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
   const showFalseAlarm = canMarkFalseAlarm(data.status);
   const autoOnly = isAutoOnlyStatus(data.status);
   const terminal = isTerminalStatus(data.status);
-  const showForward = canForwardIncident(data.status);
+  const showForward = canForwardIncident(data);
   const workflowHint = getOperatorWorkflowHint(data);
   const awaitingClosure = isAwaitingClosure(data.status);
   const showTracking = shouldShowUnitTracking(data);
@@ -901,7 +901,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
       {/* Footer actions */}
       {!loadingDetail && (
         <div className="shrink-0 space-y-2 border-t p-4" style={{ borderColor: "var(--border)" }}>
-          {autoOnly && (
+          {autoOnly && !showForward && (
             <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ backgroundColor: "var(--muted)" }}>
               <IconRadar size={16} stroke={1.5} />
@@ -949,14 +949,23 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
                   Mark False Alarm
                 </Button>
               )}
-              {showForward && (
-                <ForwardIncidentControls
-                  incident={data}
-                  disabled={updating}
-                  onForwardedAway={onForwardedAway}
-                />
-              )}
             </>
+          )}
+          {autoOnly && showForward && workflowHint && (
+            <div
+              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
+              style={{ backgroundColor: "var(--muted)" }}
+            >
+              <IconRadar size={16} stroke={1.5} />
+              {workflowHint}
+            </div>
+          )}
+          {showForward && !terminal && !awaitingClosure && (
+            <ForwardIncidentControls
+              incident={data}
+              disabled={updating}
+              onForwardedAway={onForwardedAway}
+            />
           )}
         </div>
       )}

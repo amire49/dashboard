@@ -30,9 +30,18 @@ export function isUnread(incident: { is_read?: boolean; is_new?: boolean }): boo
   return incident.is_new === true || incident.is_read === false;
 }
 
-/** Operator may forward only at `reached` (POST .../forward/). */
-export function canForwardIncident(current: string): boolean {
-  return normalizeIncidentStatus(current) === "reached";
+/**
+ * Manual forward (operator) — matches backend workflow:
+ * - routed → forward OK
+ * - dispatched without unit → forward OK
+ * - dispatched with unit / en_route+ → blocked
+ */
+export function canForwardIncident(incident: Incident): boolean {
+  if (isTerminalStatus(incident.status)) return false;
+  const s = normalizeIncidentStatus(incident.status);
+  if (s === "routed") return true;
+  if (s === "dispatched" && !incident.assigned_unit) return true;
+  return false;
 }
 
 /** First open / mark-read should move `routed` → `dispatched`. */
@@ -76,10 +85,10 @@ export function getOperatorWorkflowHint(incident: Incident): string | null {
     return "System is processing the citizen report.";
   }
   if (s === "routed") {
-    return "Opening this incident acknowledges and dispatches it to your station.";
+    return "Wrong station? Forward below, or open to acknowledge and dispatch.";
   }
   if (needsUnitAssignment(incident)) {
-    return "Assign a response unit to send the field team.";
+    return "Forward if this belongs elsewhere, or assign a unit to dispatch.";
   }
   if (
     incident.assigned_unit &&
