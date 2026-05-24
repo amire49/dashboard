@@ -1,8 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IconLoader2, IconMapPin } from "@tabler/icons-react";
+import { IconCar, IconLoader2, IconMapPin } from "@tabler/icons-react";
 import { incidentsAPI } from "@/lib/api";
+import {
+  addDefaultStreetTiles,
+  createIncidentPin,
+  createUnitPin,
+  drawRoute,
+  fixLeafletDefaultIcons,
+} from "@/lib/leaflet-map-shared";
+import {
+  fetchDrivingRoute,
+  formatRouteSummary,
+  shouldRefetchRoute,
+  type LatLng,
+  type RouteResult,
+} from "@/lib/map-routing";
 import type { UnitLocationPing } from "@/types";
 
 type Props = {
@@ -28,10 +42,19 @@ export default function UnitTrackingMap({
   const leafletMapRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const markersRef = useRef<{ incident?: any; unit?: any }>({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const routeLayerRef = useRef<any>(null);
+  const lastRouteFromRef = useRef<LatLng | null>(null);
+  const lastRouteFetchAtRef = useRef(0);
+  const lastRouteResultRef = useRef<RouteResult | null>(null);
+  const routeRequestIdRef = useRef(0);
 
   const [loading, setLoading] = useState(true);
   const [latest, setLatest] = useState<UnitLocationPing | null>(null);
   const [error, setError] = useState(false);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeSummary, setRouteSummary] = useState<string | null>(null);
+  const [routeApproximate, setRouteApproximate] = useState(false);
 
   const fetchTracking = useCallback(async () => {
     if (!enabled || !incidentId) return;
@@ -58,6 +81,56 @@ export default function UnitTrackingMap({
 
   const unitLocation = liveLocation ?? latest;
 
+  const applyRouteToMap = useCallback((map: any, L: any, result: RouteResult) => {
+    if (routeLayerRef.current) {
+      map.removeLayer(routeLayerRef.current);
+      routeLayerRef.current = null;
+    }
+
+    routeLayerRef.current = drawRoute(map, L, result.coordinates, {
+      dashArray: result.isApproximate ? "8 8" : undefined,
+    });
+
+    const bounds = L.latLngBounds(result.coordinates);
+    map.fitBounds(bounds.pad(0.2));
+
+    setRouteSummary(formatRouteSummary(result.distanceM, result.durationSec));
+    setRouteApproximate(result.isApproximate);
+  }, []);
+
+  const updateRoute = useCallback(
+    async (map: any, L: any, unit: LatLng) => {
+      const incident: LatLng = { lat: incidentLat, lng: incidentLng };
+
+      if (
+        lastRouteResultRef.current &&
+        !shouldRefetchRoute(
+          lastRouteFromRef.current,
+          unit,
+          lastRouteFetchAtRef.current
+        )
+      ) {
+        applyRouteToMap(map, L, lastRouteResultRef.current);
+        return;
+      }
+
+      const requestId = ++routeRequestIdRef.current;
+      setRouteLoading(true);
+
+      const result: RouteResult = await fetchDrivingRoute(unit, incident);
+      if (requestId !== routeRequestIdRef.current || !leafletMapRef.current) {
+        return;
+      }
+
+      lastRouteResultRef.current = result;
+      applyRouteToMap(map, L, result);
+      setRouteLoading(false);
+      lastRouteFromRef.current = unit;
+      lastRouteFetchAtRef.current = Date.now();
+    },
+    [incidentLat, incidentLng, applyRouteToMap]
+  );
+
   useEffect(() => {
     if (!mapRef.current || !enabled) return;
 
@@ -65,16 +138,7 @@ export default function UnitTrackingMap({
       if (!mapRef.current) return;
 
       if (!leafletMapRef.current) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        delete (L.Icon.Default.prototype as any)._getIconUrl;
-        L.Icon.Default.mergeOptions({
-          iconRetinaUrl:
-            "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-          iconUrl:
-            "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-          shadowUrl:
-            "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-        });
+        fixLeafletDefaultIcons(L);
 
         const map = L.map(mapRef.current, {
           center: [incidentLat, incidentLng],
@@ -83,16 +147,7 @@ export default function UnitTrackingMap({
           scrollWheelZoom: false,
         });
 
-        L.tileLayer(
-          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-          { attribution: '© <a href="https://www.esri.com/">Esri</a>', maxZoom: 19 }
-        ).addTo(map);
-
-        L.tileLayer(
-          "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-          { maxZoom: 19 }
-        ).addTo(map);
-
+        addDefaultStreetTiles(map, L);
         leafletMapRef.current = map;
       }
 
@@ -101,12 +156,8 @@ export default function UnitTrackingMap({
       if (markersRef.current.incident) {
         map.removeLayer(markersRef.current.incident);
       }
-      markersRef.current.incident = L.circleMarker([incidentLat, incidentLng], {
-        radius: 8,
-        color: "#ef4444",
-        fillColor: "#ef4444",
-        fillOpacity: 0.85,
-        weight: 2,
+      markersRef.current.incident = L.marker([incidentLat, incidentLng], {
+        icon: createIncidentPin(L),
       }).addTo(map);
 
       if (markersRef.current.unit) {
@@ -118,25 +169,25 @@ export default function UnitTrackingMap({
         const ulat = Number(unitLocation.latitude);
         const ulng = Number(unitLocation.longitude);
         if (!Number.isNaN(ulat) && !Number.isNaN(ulng)) {
-          markersRef.current.unit = L.circleMarker([ulat, ulng], {
-            radius: 8,
-            color: "#3b82f6",
-            fillColor: "#3b82f6",
-            fillOpacity: 0.85,
-            weight: 2,
+          markersRef.current.unit = L.marker([ulat, ulng], {
+            icon: createUnitPin(L),
           }).addTo(map);
 
-          const bounds = L.latLngBounds(
-            [incidentLat, incidentLng],
-            [ulat, ulng]
-          );
-          map.fitBounds(bounds.pad(0.25));
+          void updateRoute(map, L, { lat: ulat, lng: ulng });
         }
       } else {
+        if (routeLayerRef.current) {
+          map.removeLayer(routeLayerRef.current);
+          routeLayerRef.current = null;
+        }
+        lastRouteResultRef.current = null;
+        lastRouteFromRef.current = null;
+        setRouteSummary(null);
+        setRouteApproximate(false);
         map.setView([incidentLat, incidentLng], 14);
       }
     });
-  }, [enabled, incidentLat, incidentLng, unitLocation]);
+  }, [enabled, incidentLat, incidentLng, unitLocation, updateRoute]);
 
   useEffect(() => {
     return () => {
@@ -144,6 +195,7 @@ export default function UnitTrackingMap({
         leafletMapRef.current.remove();
         leafletMapRef.current = null;
         markersRef.current = {};
+        routeLayerRef.current = null;
       }
     };
   }, []);
@@ -169,13 +221,30 @@ export default function UnitTrackingMap({
 
       <div
         className="relative overflow-hidden rounded-xl border"
-        style={{ height: 200, borderColor: "var(--border)" }}
+        style={{ height: 280, borderColor: "var(--border)" }}
       >
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/50">
             <IconLoader2 size={20} stroke={1.5} className="animate-spin" />
           </div>
         )}
+
+        {routeLoading && unitLocation && !loading && (
+          <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-md">
+            Calculating route…
+          </div>
+        )}
+
+        {routeSummary && unitLocation && !routeLoading && (
+          <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-foreground shadow-md">
+            <IconCar size={14} stroke={1.5} className="text-[#4285F4]" />
+            {routeSummary}
+            {routeApproximate && (
+              <span className="font-normal text-muted-foreground">(approx.)</span>
+            )}
+          </div>
+        )}
+
         <link
           rel="stylesheet"
           href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
