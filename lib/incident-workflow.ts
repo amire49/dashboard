@@ -1,4 +1,5 @@
 import type { AssignedUnitBrief, Incident, IncidentStatus } from "@/types";
+import { isForwardedAwayIncident } from "@/lib/forward-chain";
 
 export function normalizeIncidentStatus(s: string): string {
   return s.toLowerCase().replace(/\s+/g, "_");
@@ -37,6 +38,7 @@ export function isUnread(incident: { is_read?: boolean; is_new?: boolean }): boo
  * - dispatched with unit / en_route+ → blocked
  */
 export function canForwardIncident(incident: Incident): boolean {
+  if (isForwardedAwayIncident(incident)) return false;
   if (isTerminalStatus(incident.status)) return false;
   const s = normalizeIncidentStatus(incident.status);
   if (s === "routed") return true;

@@ -139,6 +139,43 @@ export interface UnitTrackingResponse {
   pings: UnitLocationPing[];
 }
 
+export interface ForwardChainStep {
+  order: number;
+  station_id: string;
+  station_name: string;
+  station_type: string;
+  kind?: string | null;
+  target_service_type?: string | null;
+  reason?: string | null;
+  forwarded_at?: string | null;
+  from_station_id?: string | null;
+  from_station_name?: string | null;
+  initiated_by_name?: string | null;
+  is_current?: boolean;
+}
+
+export interface ForwardAwayInfo {
+  kind?: string;
+  to_station_name?: string;
+  to_station_type?: string;
+  forwarded_at?: string;
+  current_assigned_station_name?: string;
+  forward_chain?: ForwardChainStep[];
+}
+
+export type OperatorIncidentsScope = "active" | "forwarded_away" | "all";
+
+export type OperatorPerspective = "active" | "forwarded_away";
+
+export type OperatorDisplayStatus = "forwarded" | "auto_forwarded" | string;
+
+export interface IncidentForwardErrorBody {
+  error: string;
+  code?: "no_further_stations" | "station_in_chain" | string;
+  service_type?: string;
+  forward_chain?: ForwardChainStep[];
+}
+
 export interface Incident {
   id: string;
   category: IncidentType;
@@ -176,11 +213,19 @@ export interface Incident {
   // read state (operator list/detail)
   is_read?: boolean;
   is_new?: boolean;
+  // forward chain & operator perspective
+  forward_chain?: ForwardChainStep[];
+  operator_perspective?: OperatorPerspective;
+  operator_display_status?: OperatorDisplayStatus;
+  operator_display_message?: string;
+  forward_away_info?: ForwardAwayInfo;
 }
 
 export interface IncidentsListResponse {
   data: Incident[];
   unread_count?: number;
+  active?: Incident[];
+  forwarded_away?: Incident[];
 }
 
 export interface IncidentForwardMeta {

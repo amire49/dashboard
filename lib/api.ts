@@ -1,5 +1,6 @@
 import { getAccessToken, clearAuth } from "@/lib/auth";
 import type { ForwardTarget } from "@/lib/incident-forward";
+import { parseForwardError } from "@/lib/forward-chain";
 import type {
   LoginRequest,
   LoginResponse,
@@ -13,6 +14,8 @@ import type {
   Incident,
   IncidentsListResponse,
   IncidentForwardResponse,
+  IncidentForwardErrorBody,
+  OperatorIncidentsScope,
   IncidentForwardingSettings,
   StationNonResponseStatsResponse,
   IncidentForwardHistoryResponse,
@@ -288,13 +291,43 @@ function unitsArrayFromListBody(body: unknown): ResponseUnit[] {
   return [];
 }
 
+function parseIncidentsListBody(
+  body: unknown,
+  scope: OperatorIncidentsScope
+): IncidentsListResponse | null {
+  if (body === null || body === undefined) return null;
+
+  if (scope === "all" && typeof body === "object" && !Array.isArray(body)) {
+    const o = body as Record<string, unknown>;
+    const active = Array.isArray(o.active) ? (o.active as Incident[]) : [];
+    const forwarded_away = Array.isArray(o.forwarded_away)
+      ? (o.forwarded_away as Incident[])
+      : [];
+    return {
+      data: active,
+      active,
+      forwarded_away,
+      unread_count: unreadCountFromListBody(body),
+    };
+  }
+
+  const data = incidentsArrayFromListBody(body);
+  if (data === null) return null;
+  return { data, unread_count: unreadCountFromListBody(body) };
+}
+
 export const incidentsAPI = {
-  async list(): Promise<IncidentsListResponse | null> {
-    const body = await request<unknown>("/api/operator/incidents/");
+  async list(options?: {
+    scope?: OperatorIncidentsScope;
+  }): Promise<IncidentsListResponse | null> {
+    const scope = options?.scope ?? "active";
+    const endpoint =
+      scope === "active"
+        ? "/api/operator/incidents/"
+        : `/api/operator/incidents/?scope=${scope}`;
+    const body = await request<unknown>(endpoint);
     if (body === null) return null;
-    const data = incidentsArrayFromListBody(body);
-    if (data === null) return null;
-    return { data, unread_count: unreadCountFromListBody(body) };
+    return parseIncidentsListBody(body, scope);
   },
 
   get(id: string) {
@@ -317,14 +350,57 @@ export const incidentsAPI = {
   async forward(
     incidentId: string,
     body: { target: ForwardTarget; station_id?: string; reason?: string }
-  ) {
-    return requestWithError<IncidentForwardResponse>(
-      `/api/operator/incidents/${incidentId}/forward/`,
-      {
-        method: "POST",
-        body: JSON.stringify(body),
+  ): Promise<{
+    data: IncidentForwardResponse | null;
+    error: string | null;
+    errorBody: IncidentForwardErrorBody | null;
+  }> {
+    try {
+      const token = getAccessToken();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await nativeFetch(
+        `${BASE_URL}/api/operator/incidents/${incidentId}/forward/`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        }
+      );
+
+      if (res.status === 401) {
+        clearAuth();
+        if (typeof window !== "undefined") window.location.href = "/login";
+        return { data: null, error: "Session expired", errorBody: null };
       }
-    );
+
+      let responseBody: unknown = null;
+      try {
+        responseBody = await res.json();
+      } catch {
+        responseBody = null;
+      }
+
+      if (!res.ok) {
+        const errorBody = parseForwardError(responseBody);
+        return {
+          data: null,
+          error: errorBody?.error ?? parseApiErrorBody(responseBody),
+          errorBody,
+        };
+      }
+
+      return {
+        data: responseBody as IncidentForwardResponse,
+        error: null,
+        errorBody: null,
+      };
+    } catch {
+      return { data: null, error: "Network error", errorBody: null };
+    }
   },
 
   async listOperatorStations(): Promise<Station[]> {

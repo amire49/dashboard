@@ -1,4 +1,5 @@
 import type { Incident, Station } from "@/types";
+import { forwardChainStationIds } from "@/lib/forward-chain";
 
 /** Matches POST /api/operator/incidents/{id}/forward/ `target` field. */
 export type ForwardTarget =
@@ -61,9 +62,15 @@ export function rankStationsForPicker(
 ): (Station & { distance_km: number })[] {
   const coords = incidentCoords(incident);
   const currentId = incident.assigned_station?.id;
+  const chainIds = forwardChainStationIds(incident.forward_chain);
 
   return stations
-    .filter((s) => (s.is_active ?? true) && s.id !== currentId)
+    .filter(
+      (s) =>
+        (s.is_active ?? true) &&
+        s.id !== currentId &&
+        !chainIds.has(s.id)
+    )
     .map((station) => {
       const sc = stationCoords(station);
       const distance_km =

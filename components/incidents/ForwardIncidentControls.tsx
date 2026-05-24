@@ -24,7 +24,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import ForwardChainTimeline from "@/components/incidents/ForwardChainTimeline";
 import { incidentsAPI } from "@/lib/api";
+import { noFurtherStationsMessage } from "@/lib/forward-chain";
 import { useToast } from "@/lib/useToast";
 import {
   defaultNearestTargetForIncident,
@@ -34,41 +36,61 @@ import {
   reasonLabelToText,
   type ForwardTarget,
 } from "@/lib/incident-forward";
-import type { Incident, Station } from "@/types";
+import type { ForwardChainStep, Incident, Station } from "@/types";
 
 type Props = {
   incident: Incident;
   disabled?: boolean;
-  /** Incident left this station’s queue after forward. */
   onForwardedAway: (incidentId: string, meta?: { stationName?: string }) => void;
+  onChainUpdated?: (chain: ForwardChainStep[]) => void;
 };
+
+function nearestTargetsForServiceType(serviceType?: string): ForwardTarget[] {
+  const t = serviceType?.toLowerCase() ?? "";
+  if (t === "police") return ["nearest_police", "nearest_same"];
+  if (t === "medical") return ["nearest_medical", "nearest_same"];
+  if (t === "fire") return ["nearest_fire", "nearest_same"];
+  return ["nearest_same"];
+}
 
 export default function ForwardIncidentControls({
   incident,
   disabled,
   onForwardedAway,
+  onChainUpdated,
 }: Props) {
   const { success, error: toastError } = useToast();
   const [busy, setBusy] = useState(false);
-
   const [nearestOpen, setNearestOpen] = useState(false);
   const [selectOpen, setSelectOpen] = useState(false);
-
   const [reasonKey, setReasonKey] = useState("wrong_location");
   const [nearestTarget, setNearestTarget] = useState<ForwardTarget>(() =>
     defaultNearestTargetForIncident(incident)
   );
-  const nearestOptions = useMemo(
-    () => nearestTargetOptionsForIncident(incident),
-    [incident]
-  );
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStationId, setSelectedStationId] = useState("");
   const [loadingStations, setLoadingStations] = useState(false);
+  const [inlineError, setInlineError] = useState<string | null>(null);
+  const [errorChain, setErrorChain] = useState<ForwardChainStep[] | null>(null);
+  const [blockedNearestTargets, setBlockedNearestTargets] = useState<
+    Set<ForwardTarget>
+  >(() => new Set());
+
+  const effectiveIncident = useMemo(
+    () =>
+      errorChain ? { ...incident, forward_chain: errorChain } : incident,
+    [incident, errorChain]
+  );
+
+  const nearestOptions = useMemo(() => {
+    const base = nearestTargetOptionsForIncident(effectiveIncident);
+    if (blockedNearestTargets.size === 0) return base;
+    return base.filter((opt) => !blockedNearestTargets.has(opt.value));
+  }, [effectiveIncident, blockedNearestTargets]);
 
   const rankedStations = useMemo(
-    () => rankStationsForPicker(incident, stations),
-    [incident, stations]
+    () => rankStationsForPicker(effectiveIncident, stations),
+    [effectiveIncident, stations]
   );
 
   useEffect(() => {
@@ -83,19 +105,61 @@ export default function ForwardIncidentControls({
     setLoadingStations(true);
     incidentsAPI.listOperatorStations().then((rows) => {
       setStations(rows);
-      const ranked = rankStationsForPicker(incident, rows);
+      const ranked = rankStationsForPicker(effectiveIncident, rows);
       setSelectedStationId(ranked[0]?.id ?? "");
       setLoadingStations(false);
     });
-  }, [selectOpen, incident]);
+  }, [selectOpen, effectiveIncident]);
 
-  async function submitForward(
-    target: ForwardTarget,
-    stationId?: string
+  function resetDialogState() {
+    setInlineError(null);
+    setErrorChain(null);
+  }
+
+  function handleForwardError(
+    error: string | null,
+    errorBody: {
+      code?: string;
+      service_type?: string;
+      forward_chain?: ForwardChainStep[];
+    } | null
   ) {
+    if (errorBody?.forward_chain?.length) {
+      setErrorChain(errorBody.forward_chain);
+      onChainUpdated?.(errorBody.forward_chain);
+    }
+
+    if (errorBody?.code === "station_in_chain") {
+      toastError(
+        "Station already in chain",
+        "This station already handled this incident."
+      );
+      setInlineError("This station already handled this incident.");
+      return;
+    }
+
+    if (errorBody?.code === "no_further_stations") {
+      const msg = noFurtherStationsMessage(errorBody.service_type);
+      toastError("No further stations", msg);
+      setInlineError(msg);
+      const blocked = nearestTargetsForServiceType(errorBody.service_type);
+      setBlockedNearestTargets((prev) => {
+        const next = new Set(prev);
+        blocked.forEach((t) => next.add(t));
+        return next;
+      });
+      return;
+    }
+
+    toastError("Forward failed", error ?? "Could not forward incident.");
+    setInlineError(error ?? "Could not forward incident.");
+  }
+
+  async function submitForward(target: ForwardTarget, stationId?: string) {
     const reason = reasonLabelToText(reasonKey);
     setBusy(true);
-    const { data, error } = await incidentsAPI.forward(incident.id, {
+    setInlineError(null);
+    const { data, error, errorBody } = await incidentsAPI.forward(incident.id, {
       target,
       ...(target === "station" && stationId ? { station_id: stationId } : {}),
       ...(reason ? { reason } : {}),
@@ -103,8 +167,12 @@ export default function ForwardIncidentControls({
     setBusy(false);
 
     if (error || !data) {
-      toastError("Forward failed", error ?? "Could not forward incident.");
+      handleForwardError(error, errorBody);
       return;
+    }
+
+    if (data.forward_chain?.length) {
+      onChainUpdated?.(data.forward_chain);
     }
 
     const stationName =
@@ -116,6 +184,7 @@ export default function ForwardIncidentControls({
     onForwardedAway(incident.id, { stationName });
     setNearestOpen(false);
     setSelectOpen(false);
+    resetDialogState();
   }
 
   return (
@@ -134,8 +203,9 @@ export default function ForwardIncidentControls({
         type="button"
         variant="outline"
         className="w-full gap-2 rounded-xl border-indigo-200 bg-indigo-50/50 text-indigo-900 hover:bg-indigo-50"
-        disabled={disabled || busy}
+        disabled={disabled || busy || nearestOptions.length === 0}
         onClick={() => {
+          resetDialogState();
           setReasonKey("wrong_location");
           setNearestTarget(defaultNearestTargetForIncident(incident));
           setNearestOpen(true);
@@ -151,6 +221,7 @@ export default function ForwardIncidentControls({
         className="w-full gap-2 rounded-xl"
         disabled={disabled || busy}
         onClick={() => {
+          resetDialogState();
           setReasonKey("other");
           setSelectedStationId("");
           setSelectOpen(true);
@@ -160,7 +231,13 @@ export default function ForwardIncidentControls({
         Forward to selected location
       </Button>
 
-      <Dialog open={nearestOpen} onOpenChange={setNearestOpen}>
+      <Dialog
+        open={nearestOpen}
+        onOpenChange={(open) => {
+          setNearestOpen(open);
+          if (!open) resetDialogState();
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Forward to nearest station</DialogTitle>
@@ -170,6 +247,16 @@ export default function ForwardIncidentControls({
               station.
             </DialogDescription>
           </DialogHeader>
+
+          {inlineError && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {inlineError}
+            </div>
+          )}
+
+          {errorChain && errorChain.length > 0 && (
+            <ForwardChainTimeline chain={errorChain} compact title="Current chain" />
+          )}
 
           <div className="rounded-xl border bg-muted/40 p-4">
             <div className="flex items-start gap-3">
@@ -187,21 +274,27 @@ export default function ForwardIncidentControls({
 
           <div className="space-y-2">
             <Label className="text-xs">Nearest target</Label>
-            <Select
-              value={nearestTarget}
-              onValueChange={(v) => setNearestTarget(v as ForwardTarget)}
-            >
-              <SelectTrigger className="rounded-lg">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {nearestOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {nearestOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No nearest targets available for this service type.
+              </p>
+            ) : (
+              <Select
+                value={nearestTarget}
+                onValueChange={(v) => setNearestTarget(v as ForwardTarget)}
+              >
+                <SelectTrigger className="rounded-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {nearestOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -224,7 +317,10 @@ export default function ForwardIncidentControls({
             <Button variant="outline" onClick={() => setNearestOpen(false)} disabled={busy}>
               Cancel
             </Button>
-            <Button onClick={() => submitForward(nearestTarget)} disabled={busy}>
+            <Button
+              onClick={() => submitForward(nearestTarget)}
+              disabled={busy || nearestOptions.length === 0}
+            >
               {busy ? (
                 <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
               ) : (
@@ -235,7 +331,13 @@ export default function ForwardIncidentControls({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={selectOpen} onOpenChange={setSelectOpen}>
+      <Dialog
+        open={selectOpen}
+        onOpenChange={(open) => {
+          setSelectOpen(open);
+          if (!open) resetDialogState();
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Forward to selected location</DialogTitle>
@@ -244,6 +346,16 @@ export default function ForwardIncidentControls({
               your queue.
             </DialogDescription>
           </DialogHeader>
+
+          {inlineError && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {inlineError}
+            </div>
+          )}
+
+          {errorChain && errorChain.length > 0 && (
+            <ForwardChainTimeline chain={errorChain} compact title="Current chain" />
+          )}
 
           <div className="space-y-2">
             <Label className="text-xs">Reason (optional)</Label>

@@ -50,6 +50,11 @@ export type BackendIncidentPayload = {
   is_new?: boolean;
   assigned_unit?: unknown;
   unit_assigned_at?: string | null;
+  forward_chain?: unknown;
+  operator_perspective?: string;
+  operator_display_status?: string;
+  operator_display_message?: string;
+  forward_away_info?: unknown;
 };
 
 export type BackendUnitLocationPayload = {

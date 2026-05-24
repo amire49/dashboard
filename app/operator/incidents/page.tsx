@@ -32,6 +32,7 @@ import {
   IconPlayerPause,
   IconLoader2,
   IconMail,
+  IconHistory,
 } from "@tabler/icons-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,9 +65,11 @@ import {
   shouldAcknowledgeOnOpen,
 } from "@/lib/incident-workflow";
 import ForwardIncidentControls from "@/components/incidents/ForwardIncidentControls";
+import ForwardChainTimeline from "@/components/incidents/ForwardChainTimeline";
 import AssignUnitControls from "@/components/incidents/AssignUnitControls";
 import UnitTrackingMap from "@/components/incidents/UnitTrackingMap";
-import type { Incident, IncidentStatus, UnitLocationPing } from "@/types";
+import { formatForwardAwayBadge } from "@/lib/forward-chain";
+import type { Incident, IncidentStatus, OperatorPerspective, UnitLocationPing } from "@/types";
 
 const IncidentMap = dynamic(() => import("@/components/incidents/IncidentMap"), {
   ssr: false,
@@ -101,6 +104,7 @@ const INCIDENT_STATUSES = [
 
 type FilterCategory = (typeof INCIDENT_CATEGORIES)[number];
 type FilterStatus   = (typeof INCIDENT_STATUSES)[number];
+type QueueTab = "active" | "forwarded_away";
 
 // ── Error Boundary ────────────────────────────────────────────────────────────
 
@@ -418,6 +422,23 @@ function CategoryBadge({ category }: { category: string }) {
   );
 }
 
+function ForwardAwayBadge({ status }: { status?: string | null }) {
+  const { label, variant } = formatForwardAwayBadge(status);
+  const isAuto = variant === "auto";
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${
+        isAuto
+          ? "border-violet-200 bg-violet-50 text-violet-700"
+          : "border-indigo-200 bg-indigo-50 text-indigo-700"
+      }`}
+    >
+      <IconHistory size={14} stroke={1.5} />
+      {label}
+    </span>
+  );
+}
+
 // ── Misc helpers ──────────────────────────────────────────────────────────────
 
 function formatTime(raw: string) {
@@ -602,18 +623,33 @@ function ErrorBanner({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function EmptyState({ isFiltered }: { isFiltered: boolean }) {
+function EmptyState({ isFiltered, queueTab }: { isFiltered: boolean; queueTab?: QueueTab }) {
+  const isForwardedAway = queueTab === "forwarded_away";
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
       <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl"
-        style={{ backgroundColor: isFiltered ? "var(--muted)" : "rgb(220 252 231)" }}>
+        style={{
+          backgroundColor: isFiltered || isForwardedAway ? "var(--muted)" : "rgb(220 252 231)",
+        }}>
         {isFiltered
           ? <IconAdjustmentsHorizontal size={36} stroke={1.5} className="text-muted-foreground" />
-          : <IconCircleCheck size={36} stroke={1.5} className="text-green-600" />}
+          : isForwardedAway
+            ? <IconHistory size={36} stroke={1.5} className="text-muted-foreground" />
+            : <IconCircleCheck size={36} stroke={1.5} className="text-green-600" />}
       </div>
-      <p className="text-xl font-bold mb-2">{isFiltered ? "No matching incidents" : "All clear"}</p>
+      <p className="text-xl font-bold mb-2">
+        {isFiltered
+          ? "No matching incidents"
+          : isForwardedAway
+            ? "No forwarded incidents"
+            : "All clear"}
+      </p>
       <p className="text-sm text-muted-foreground max-w-md">
-        {isFiltered ? "Try adjusting or clearing your filters" : "No incidents assigned to your station"}
+        {isFiltered
+          ? "Try adjusting or clearing your filters"
+          : isForwardedAway
+            ? "Incidents you forward away will appear here for audit"
+            : "No incidents assigned to your station"}
       </p>
     </div>
   );
@@ -638,20 +674,22 @@ function DetailField({ icon: Icon, label, children }: {
   );
 }
 
-function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatusUpdate, onForwardedAway, unitLiveLocation }: {
+function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onClose, onStatusUpdate, onForwardedAway, onChainUpdated, unitLiveLocation }: {
   incident: Incident;
   detail: Incident | null;
   loadingDetail: boolean;
+  perspective: OperatorPerspective;
   onClose: () => void;
   onStatusUpdate: (updated: Incident) => void;
   onForwardedAway: (incidentId: string) => void;
+  onChainUpdated?: (chain: Incident["forward_chain"]) => void;
   unitLiveLocation?: UnitLocationPing | null;
 }) {
   const data = detail ?? incident;
   const [updating, setUpdating] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const isAuditView = perspective === "forwarded_away";
 
-  // Use the global toast singleton instead of local state.
   const { success, error: toastError } = useToast();
 
   const cfg = CATEGORY_CONFIG[data.category?.toLowerCase()] ?? {
@@ -661,13 +699,15 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
     icon: IconAlertHexagon,
   };
   const coords = latLng(data);
-  const showFalseAlarm = canMarkFalseAlarm(data.status);
+  const showFalseAlarm = !isAuditView && canMarkFalseAlarm(data.status);
   const autoOnly = isAutoOnlyStatus(data.status);
   const terminal = isTerminalStatus(data.status);
-  const showForward = canForwardIncident(data);
+  const showForward = !isAuditView && canForwardIncident(data);
   const workflowHint = getOperatorWorkflowHint(data);
   const awaitingClosure = isAwaitingClosure(data.status);
-  const showTracking = shouldShowUnitTracking(data);
+  const showTracking = !isAuditView && shouldShowUnitTracking(data);
+  const chain =
+    data.forward_chain ?? data.forward_away_info?.forward_chain ?? null;
 
   async function patchStatus(status: IncidentStatus) {
     setUpdating(true);
@@ -705,11 +745,32 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
       {/* Status strip */}
       <div className="shrink-0 flex items-center gap-2.5 px-5 py-2.5 border-b"
         style={{ borderColor: "var(--border)", backgroundColor: "var(--muted)" }}>
-        <StatusBadge status={data.status} />
-        {normalizeIncidentStatus(data.status) === "routed" && (
+        {isAuditView ? (
+          <ForwardAwayBadge status={data.operator_display_status} />
+        ) : (
+          <StatusBadge status={data.status} />
+        )}
+        {!isAuditView && normalizeIncidentStatus(data.status) === "routed" && (
           <span className="text-xs text-red-500 font-medium">Requires immediate attention</span>
         )}
       </div>
+
+      {isAuditView && data.operator_display_message && (
+        <div className="shrink-0 border-b bg-indigo-50/60 px-5 py-3 text-sm text-indigo-900"
+          style={{ borderColor: "var(--border)" }}>
+          {data.operator_display_message}
+        </div>
+      )}
+
+      {isAuditView && data.forward_away_info?.current_assigned_station_name && (
+        <div className="shrink-0 border-b px-5 py-2.5 text-xs text-muted-foreground"
+          style={{ borderColor: "var(--border)" }}>
+          Currently at{" "}
+          <span className="font-semibold text-foreground">
+            {data.forward_away_info.current_assigned_station_name}
+          </span>
+        </div>
+      )}
 
       {/* Scrollable content */}
       <div className="flex-1 min-h-0 overflow-y-auto">
@@ -783,13 +844,15 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
               </DetailField>
             </div>
 
-            <div className="px-5 py-4">
-              <AssignUnitControls
-                incident={data}
-                disabled={updating}
-                onUpdated={onStatusUpdate}
-              />
-            </div>
+            {!isAuditView && (
+              <div className="px-5 py-4">
+                <AssignUnitControls
+                  incident={data}
+                  disabled={updating}
+                  onUpdated={onStatusUpdate}
+                />
+              </div>
+            )}
 
             {showTracking && coords && (
               <div className="px-5 py-4">
@@ -869,6 +932,12 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
               </div>
             )}
 
+            {chain && chain.length > 0 && (
+              <div className="px-5 py-4">
+                <ForwardChainTimeline chain={chain} />
+              </div>
+            )}
+
             <div className="px-5 py-4">
               <DetailField icon={IconFileText} label="Transcription">
                 {data.amharic_text || data.english_text ? (
@@ -901,6 +970,14 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
       {/* Footer actions */}
       {!loadingDetail && (
         <div className="shrink-0 space-y-2 border-t p-4" style={{ borderColor: "var(--border)" }}>
+          {isAuditView ? (
+            <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
+              style={{ backgroundColor: "var(--muted)" }}>
+              <IconHistory size={16} stroke={1.5} />
+              Read-only audit view — no actions available
+            </div>
+          ) : (
+            <>
           {autoOnly && !showForward && (
             <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ backgroundColor: "var(--muted)" }}>
@@ -965,7 +1042,13 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, onClose, onStatu
               incident={data}
               disabled={updating}
               onForwardedAway={onForwardedAway}
+              onChainUpdated={(updatedChain) => {
+                onChainUpdated?.(updatedChain);
+                onStatusUpdate({ ...data, forward_chain: updatedChain });
+              }}
             />
+          )}
+            </>
           )}
         </div>
       )}
@@ -985,9 +1068,36 @@ function IncidentsPageInner() {
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+  const [queueTab, setQueueTab] = useState<QueueTab>("active");
+  const [forwardedAwayIncidents, setForwardedAwayIncidents] = useState<Incident[]>([]);
+  const [loadingForwardedAway, setLoadingForwardedAway] = useState(false);
+  const [forwardedAwayError, setForwardedAwayError] = useState(false);
+  const queueTabRef = useRef<QueueTab>("active");
   const [unitLiveByIncident, setUnitLiveByIncident] = useState<
     Record<string, UnitLocationPing>
   >({});
+
+  const fetchForwardedAway = useCallback(async () => {
+    setLoadingForwardedAway(true);
+    setForwardedAwayError(false);
+    const res = await incidentsAPI.list({ scope: "forwarded_away" });
+    if (res === null) {
+      setForwardedAwayError(true);
+    } else {
+      setForwardedAwayIncidents(res.data ?? []);
+    }
+    setLoadingForwardedAway(false);
+  }, []);
+
+  useEffect(() => {
+    queueTabRef.current = queueTab;
+  }, [queueTab]);
+
+  useEffect(() => {
+    if (queueTab === "forwarded_away") {
+      fetchForwardedAway();
+    }
+  }, [queueTab, fetchForwardedAway]);
 
   const {
     incidents,
@@ -1012,6 +1122,9 @@ function IncidentsPageInner() {
         delete next[id];
         return next;
       });
+      if (queueTabRef.current === "forwarded_away") {
+        fetchForwardedAway();
+      }
     },
     onUnitLocationUpdate(incidentId, location) {
       setUnitLiveByIncident((prev) => ({
@@ -1026,8 +1139,9 @@ function IncidentsPageInner() {
       setIncidents((prev) => prev.filter((i) => i.id !== incidentId));
       setSelected((prev) => (prev?.id === incidentId ? null : prev));
       setDetail((prev) => (prev?.id === incidentId ? null : prev));
+      fetchForwardedAway();
     },
-    [setIncidents]
+    [setIncidents, fetchForwardedAway]
   );
 
   const applyIncidentUpdate = useCallback((updated: Incident) => {
@@ -1038,10 +1152,11 @@ function IncidentsPageInner() {
     setDetail((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
   }, [setIncidents]);
 
-  function openDetail(incident: Incident) {
-    const wasUnread = isUnread(incident);
-    const shouldAck = shouldAcknowledgeOnOpen(incident);
-    setSelected(incident);
+  function openDetail(incident: Incident, perspective: OperatorPerspective = queueTab) {
+    const isActiveQueue = perspective === "active";
+    const wasUnread = isActiveQueue && isUnread(incident);
+    const shouldAck = isActiveQueue && shouldAcknowledgeOnOpen(incident);
+    setSelected({ ...incident, operator_perspective: perspective });
     setDetail(null);
     setLoadingDetail(true);
 
@@ -1053,15 +1168,27 @@ function IncidentsPageInner() {
 
       const merged = readRes ?? detailRes;
       if (merged) {
-        applyIncidentUpdate(merged);
+        const withPerspective = { ...merged, operator_perspective: perspective };
+        if (isActiveQueue) {
+          applyIncidentUpdate(withPerspective);
+        } else {
+          setForwardedAwayIncidents((prev) =>
+            prev.map((i) => (i.id === withPerspective.id ? { ...i, ...withPerspective } : i))
+          );
+          setSelected(withPerspective);
+        }
         if (wasUnread) {
           setUnreadCount((c) => Math.max(0, c - 1));
         }
+        setDetail(withPerspective);
       } else if (detailRes) {
-        applyIncidentUpdate(detailRes);
+        const withPerspective = { ...detailRes, operator_perspective: perspective };
+        if (isActiveQueue) {
+          applyIncidentUpdate(withPerspective);
+        }
+        setDetail(withPerspective);
       }
 
-      setDetail(merged ?? detailRes);
       setLoadingDetail(false);
     })();
   }
@@ -1090,17 +1217,33 @@ function IncidentsPageInner() {
     applyIncidentUpdate(updated);
   }
 
-  const filtered = useMemo(() => {
+  const filteredActive = useMemo(() => {
     return incidents
       .filter(i => categoryFilter === "all" || i.category?.toLowerCase() === categoryFilter)
       .filter(i => statusFilter === "all" || normalizeIncidentStatus(i.status) === statusFilter)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [incidents, categoryFilter, statusFilter]);
 
+  const filteredForwardedAway = useMemo(() => {
+    return forwardedAwayIncidents
+      .filter(i => categoryFilter === "all" || i.category?.toLowerCase() === categoryFilter)
+      .filter(i => statusFilter === "all" || normalizeIncidentStatus(i.status) === statusFilter)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [forwardedAwayIncidents, categoryFilter, statusFilter]);
+
+  const filtered = queueTab === "active" ? filteredActive : filteredForwardedAway;
   const isFiltered = categoryFilter !== "all" || statusFilter !== "all";
 
+  function handleRefresh() {
+    if (queueTab === "active") {
+      refresh();
+    } else {
+      fetchForwardedAway();
+    }
+  }
+
   if (checking) return null;
-  if (loading)  return <PageSkeleton />;
+  if (loading && queueTab === "active") return <PageSkeleton />;
 
   if (fetchError) {
     return (
@@ -1151,7 +1294,7 @@ function IncidentsPageInner() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={refresh} className="gap-2 rounded-lg">
+            <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-2 rounded-lg">
               <IconRefresh size={16} stroke={1.5} />
               Refresh
             </Button>
@@ -1171,10 +1314,12 @@ function IncidentsPageInner() {
           </div>
         </div>
 
-        <StatCards incidents={incidents} unreadCount={unreadCount} />
+        {queueTab === "active" && (
+          <StatCards incidents={incidents} unreadCount={unreadCount} />
+        )}
 
-        {/* Map view */}
-        {view === "map" && (
+        {/* Map view — active queue only */}
+        {view === "map" && queueTab === "active" && (
           <div className="overflow-hidden rounded-2xl border shadow-sm"
             style={{ height: "calc(100vh - 260px)", borderColor: "var(--border)" }}>
             <IncidentMap incidents={filtered} onSelect={openDetail} selectedId={selected?.id} />
@@ -1185,6 +1330,47 @@ function IncidentsPageInner() {
         {view === "list" && (
           <div className="grid grid-cols-12 gap-4">
             <div className={selected ? "col-span-7" : "col-span-12"}>
+
+              {/* Queue tabs */}
+              <Card className="mb-4 border shadow-sm rounded-xl">
+                <CardContent className="flex flex-wrap items-center gap-2 p-3">
+                  {([
+                    { id: "active" as const, label: "Active", count: incidents.length },
+                    {
+                      id: "forwarded_away" as const,
+                      label: "Forwarded away",
+                      count: forwardedAwayIncidents.length,
+                    },
+                  ]).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        setQueueTab(tab.id);
+                        setSelected(null);
+                        setDetail(null);
+                        if (tab.id === "active") setView("list");
+                      }}
+                      className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                        queueTab === tab.id
+                          ? "bg-background text-foreground shadow-sm border"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      {tab.label}
+                      <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px]">
+                        {tab.count}
+                      </span>
+                    </button>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {forwardedAwayError && queueTab === "forwarded_away" && (
+                <div className="mb-4">
+                  <ErrorBanner onRetry={fetchForwardedAway} />
+                </div>
+              )}
 
               {/* Filter bar */}
               <Card className="mb-4 border shadow-sm rounded-xl">
@@ -1234,30 +1420,55 @@ function IncidentsPageInner() {
                   <CardTitle className="text-lg font-bold">Incident List</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  {filtered.length === 0 ? (
-                    <EmptyState isFiltered={isFiltered} />
+                  {loadingForwardedAway && queueTab === "forwarded_away" ? (
+                    <div className="flex items-center justify-center py-20 text-muted-foreground">
+                      <IconLoader2 size={24} stroke={1.5} className="animate-spin" />
+                    </div>
+                  ) : filtered.length === 0 ? (
+                    <EmptyState isFiltered={isFiltered} queueTab={queueTab} />
                   ) : (
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
                           <TableHead className="text-xs font-bold uppercase tracking-wider">Category</TableHead>
                           <TableHead className="text-xs font-bold uppercase tracking-wider">Reporter</TableHead>
-                          <TableHead className="text-xs font-bold uppercase tracking-wider">Station</TableHead>
-                          <TableHead className="text-xs font-bold uppercase tracking-wider">Unit</TableHead>
+                          <TableHead className="text-xs font-bold uppercase tracking-wider">
+                            {queueTab === "forwarded_away" ? "Destination" : "Station"}
+                          </TableHead>
+                          {queueTab === "active" && (
+                            <TableHead className="text-xs font-bold uppercase tracking-wider">Unit</TableHead>
+                          )}
                           <TableHead className="text-xs font-bold uppercase tracking-wider">Status</TableHead>
                           <TableHead className="text-xs font-bold uppercase tracking-wider">Time</TableHead>
-                          <TableHead className="w-12 text-xs font-bold uppercase tracking-wider" />
+                          {queueTab === "active" && (
+                            <TableHead className="w-12 text-xs font-bold uppercase tracking-wider" />
+                          )}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filtered.map(incident => {
-                          const isRouted = normalizeIncidentStatus(incident.status) === "routed";
-                          const unread = isUnread(incident);
+                          const isForwardedAwayTab = queueTab === "forwarded_away";
+                          const isRouted = !isForwardedAwayTab && normalizeIncidentStatus(incident.status) === "routed";
+                          const unread = !isForwardedAwayTab && isUnread(incident);
                           const isSelected = selected?.id === incident.id;
+                          const awaySubtitle =
+                            incident.operator_display_message ??
+                            incident.forward_away_info?.to_station_name ??
+                            incident.forward_away_info?.current_assigned_station_name;
                           return (
-                            <TableRow key={incident.id} onClick={() => openDetail(incident)}
+                            <TableRow
+                              key={incident.id}
+                              onClick={() => openDetail(incident, queueTab)}
                               className={`cursor-pointer transition-all hover:bg-muted/50 ${
-                                isSelected ? "bg-muted" : isRouted ? "bg-red-50/30" : unread ? "bg-indigo-50/40" : ""
+                                isSelected
+                                  ? "bg-muted"
+                                  : isForwardedAwayTab
+                                    ? "opacity-90"
+                                    : isRouted
+                                      ? "bg-red-50/30"
+                                      : unread
+                                        ? "bg-indigo-50/40"
+                                        : ""
                               } ${unread ? "font-semibold" : ""}`}
                               style={{
                                 borderLeft: isRouted
@@ -1282,32 +1493,48 @@ function IncidentsPageInner() {
                                 )}
                               </TableCell>
                               <TableCell className="py-4 text-sm text-muted-foreground">
-                                {incident.assigned_station?.name ?? "—"}
+                                {isForwardedAwayTab ? (
+                                  <div>
+                                    <p>{awaySubtitle ?? "—"}</p>
+                                  </div>
+                                ) : (
+                                  incident.assigned_station?.name ?? "—"
+                                )}
                               </TableCell>
-                              <TableCell className="py-4 text-sm text-muted-foreground">
-                                {incident.assigned_unit?.name ?? "—"}
+                              {queueTab === "active" && (
+                                <TableCell className="py-4 text-sm text-muted-foreground">
+                                  {incident.assigned_unit?.name ?? "—"}
+                                </TableCell>
+                              )}
+                              <TableCell className="py-4">
+                                {isForwardedAwayTab ? (
+                                  <ForwardAwayBadge status={incident.operator_display_status} />
+                                ) : (
+                                  <StatusBadge status={incident.status} />
+                                )}
                               </TableCell>
-                              <TableCell className="py-4"><StatusBadge status={incident.status} /></TableCell>
                               <TableCell className="py-4 font-mono text-sm text-muted-foreground">
                                 {formatTime(incident.created_at)}
                               </TableCell>
-                              <TableCell className="py-4 pr-4">
-                                {!incident.is_read && (
-                                  <button
-                                    type="button"
-                                    title="Mark as read"
-                                    disabled={markingReadId === incident.id}
-                                    onClick={(e) => handleMarkRead(e, incident)}
-                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-indigo-600 transition-colors hover:bg-indigo-50 disabled:opacity-50"
-                                  >
-                                    {markingReadId === incident.id ? (
-                                      <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
-                                    ) : (
-                                      <IconMail size={16} stroke={1.5} />
-                                    )}
-                                  </button>
-                                )}
-                              </TableCell>
+                              {queueTab === "active" && (
+                                <TableCell className="py-4 pr-4">
+                                  {!incident.is_read && (
+                                    <button
+                                      type="button"
+                                      title="Mark as read"
+                                      disabled={markingReadId === incident.id}
+                                      onClick={(e) => handleMarkRead(e, incident)}
+                                      className="flex h-8 w-8 items-center justify-center rounded-lg text-indigo-600 transition-colors hover:bg-indigo-50 disabled:opacity-50"
+                                    >
+                                      {markingReadId === incident.id ? (
+                                        <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                                      ) : (
+                                        <IconMail size={16} stroke={1.5} />
+                                      )}
+                                    </button>
+                                  )}
+                                </TableCell>
+                              )}
                             </TableRow>
                           );
                         })}
@@ -1324,8 +1551,12 @@ function IncidentsPageInner() {
                 <Card className="border-0 shadow-sm rounded-xl overflow-hidden sticky top-0"
                   style={{ maxHeight: "calc(100vh - 180px)" }}>
                   <IncidentDetailPanel
-                    incident={selected} detail={detail} loadingDetail={loadingDetail}
-                    onClose={closeDetail} onStatusUpdate={handleStatusUpdate}
+                    incident={selected}
+                    detail={detail}
+                    loadingDetail={loadingDetail}
+                    perspective={queueTab}
+                    onClose={closeDetail}
+                    onStatusUpdate={handleStatusUpdate}
                     unitLiveLocation={
                       selected ? unitLiveByIncident[selected.id] ?? null : null
                     }

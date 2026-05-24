@@ -11,7 +11,7 @@ import type {
   BackendUnitLocationPayload,
   BackendWSMessage,
 } from "./useWebSocket";
-import type { AssignedUnitBrief, Incident, UnitLocationPing } from "@/types";
+import type { AssignedUnitBrief, ForwardAwayInfo, ForwardChainStep, Incident, UnitLocationPing } from "@/types";
 import { isUnread, normalizeIncidentStatus } from "./incident-workflow";
 
 // ── Payload → Incident mapper ─────────────────────────────────────────────────
@@ -44,6 +44,19 @@ function mapPayload(p: BackendIncidentPayload, existing?: Incident): Incident {
       p.unit_assigned_at ?? existing?.unit_assigned_at ?? null,
     is_read: p.is_read ?? existing?.is_read,
     is_new: p.is_new ?? existing?.is_new,
+    forward_chain:
+      (p.forward_chain as ForwardChainStep[] | undefined) ??
+      existing?.forward_chain,
+    operator_perspective:
+      (p.operator_perspective as Incident["operator_perspective"]) ??
+      existing?.operator_perspective,
+    operator_display_status:
+      p.operator_display_status ?? existing?.operator_display_status,
+    operator_display_message:
+      p.operator_display_message ?? existing?.operator_display_message,
+    forward_away_info:
+      (p.forward_away_info as ForwardAwayInfo | undefined) ??
+      existing?.forward_away_info,
   };
 }
 
@@ -244,7 +257,7 @@ export function useIncidentSocket(
       if (!enabledRef.current) return;
       if (!silent) setLoading(true);
       setFetchError(false);
-      const res = await incidentsAPI.list();
+      const res = await incidentsAPI.list({ scope: "active" });
       if (res === null) {
         setFetchError(true);
       } else {
