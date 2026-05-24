@@ -82,3 +82,34 @@ export const NEAREST_TARGET_OPTIONS: {
   { value: "nearest_medical", label: "Nearest medical station" },
   { value: "nearest_fire", label: "Nearest fire station" },
 ];
+
+/** Type-specific nearest target (redundant when already at that station type). */
+const NEAREST_TARGET_BY_STATION_TYPE: Record<string, ForwardTarget> = {
+  police: "nearest_police",
+  medical: "nearest_medical",
+  fire: "nearest_fire",
+};
+
+function currentStationType(incident: Incident): string {
+  return (
+    incident.assigned_station?.type ??
+    incident.service_type ??
+    ""
+  ).toLowerCase();
+}
+
+/** Hide e.g. "Nearest medical" when the incident is already at a medical station. */
+export function nearestTargetOptionsForIncident(incident: Incident) {
+  const redundant = NEAREST_TARGET_BY_STATION_TYPE[currentStationType(incident)];
+  if (!redundant) return NEAREST_TARGET_OPTIONS;
+  return NEAREST_TARGET_OPTIONS.filter((opt) => opt.value !== redundant);
+}
+
+/** Default nearest target when opening the forward dialog. */
+export function defaultNearestTargetForIncident(incident: Incident): ForwardTarget {
+  const stationType = currentStationType(incident);
+  if (stationType in NEAREST_TARGET_BY_STATION_TYPE) {
+    return "nearest_same";
+  }
+  return preferredNearestTarget(incident.category ?? "");
+}

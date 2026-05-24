@@ -27,9 +27,9 @@ import {
 import { incidentsAPI } from "@/lib/api";
 import { useToast } from "@/lib/useToast";
 import {
+  defaultNearestTargetForIncident,
   FORWARD_REASON_LABELS,
-  NEAREST_TARGET_OPTIONS,
-  preferredNearestTarget,
+  nearestTargetOptionsForIncident,
   rankStationsForPicker,
   reasonLabelToText,
   type ForwardTarget,
@@ -56,7 +56,11 @@ export default function ForwardIncidentControls({
 
   const [reasonKey, setReasonKey] = useState("wrong_location");
   const [nearestTarget, setNearestTarget] = useState<ForwardTarget>(() =>
-    preferredNearestTarget(incident.category ?? "")
+    defaultNearestTargetForIncident(incident)
+  );
+  const nearestOptions = useMemo(
+    () => nearestTargetOptionsForIncident(incident),
+    [incident]
   );
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStationId, setSelectedStationId] = useState("");
@@ -66,6 +70,13 @@ export default function ForwardIncidentControls({
     () => rankStationsForPicker(incident, stations),
     [incident, stations]
   );
+
+  useEffect(() => {
+    if (!nearestOpen) return;
+    if (!nearestOptions.some((o) => o.value === nearestTarget)) {
+      setNearestTarget(nearestOptions[0]?.value ?? "nearest_same");
+    }
+  }, [nearestOpen, nearestOptions, nearestTarget]);
 
   useEffect(() => {
     if (!selectOpen) return;
@@ -126,7 +137,7 @@ export default function ForwardIncidentControls({
         disabled={disabled || busy}
         onClick={() => {
           setReasonKey("wrong_location");
-          setNearestTarget(preferredNearestTarget(incident.category ?? ""));
+          setNearestTarget(defaultNearestTargetForIncident(incident));
           setNearestOpen(true);
         }}
       >
@@ -184,7 +195,7 @@ export default function ForwardIncidentControls({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {NEAREST_TARGET_OPTIONS.map((opt) => (
+                {nearestOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
                   </SelectItem>
