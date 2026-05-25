@@ -782,7 +782,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
                   <div className="mt-1 space-y-2">
                     {data.amharic_text && (
                       <div className="rounded-xl bg-muted p-3 text-sm leading-relaxed text-muted-foreground">
-                        <p className="text-label mb-1 opacity-60">Amharic</p>
+                        <p className="text-label mb-1 opacity-60">{data.language}</p>
                         {data.amharic_text}
                       </div>
                     )}
@@ -991,30 +991,43 @@ function IncidentsPageInner() {
     setLoadingDetail(true);
 
     (async () => {
-      const [detailRes, readRes] = await Promise.all([
-        incidentsAPI.get(incident.id),
-        shouldAck ? incidentsAPI.markRead(incident.id) : Promise.resolve(null),
-      ]);
+      // Acknowledge first so the subsequent GET reflects the post-ack state
+      // (e.g. routed → dispatched, is_read = true). Backends that respond with
+      // 204 No Content still count as a success here.
+      let ackedIncident: Incident | null = null;
+      let ackSucceeded = !shouldAck;
+      if (shouldAck) {
+        const ackRes = await incidentsAPI.markRead(incident.id);
+        ackSucceeded = ackRes.error === null;
+        ackedIncident = ackRes.data;
+      }
 
-      const merged = readRes ?? detailRes;
-      if (merged) {
-        const withPerspective = { ...merged, operator_perspective: perspective };
+      const detailRes = await incidentsAPI.get(incident.id);
+      const baseline = detailRes ?? ackedIncident;
+
+      if (baseline) {
+        const withPerspective: Incident = {
+          ...baseline,
+          operator_perspective: perspective,
+          // Safety net: if the ack succeeded but the response body did not
+          // reflect the read flags (e.g. 204), enforce them locally so the
+          // unread indicator updates immediately.
+          ...(shouldAck && ackSucceeded
+            ? { is_read: true, is_new: false }
+            : {}),
+        };
         if (isActiveQueue) {
           applyIncidentUpdate(withPerspective);
         } else {
           setForwardedAwayIncidents((prev) =>
-            prev.map((i) => (i.id === withPerspective.id ? { ...i, ...withPerspective } : i))
+            prev.map((i) =>
+              i.id === withPerspective.id ? { ...i, ...withPerspective } : i
+            )
           );
           setSelected(withPerspective);
         }
-        if (wasUnread) {
+        if (wasUnread && ackSucceeded) {
           setUnreadCount((c) => Math.max(0, c - 1));
-        }
-        setDetail(withPerspective);
-      } else if (detailRes) {
-        const withPerspective = { ...detailRes, operator_perspective: perspective };
-        if (isActiveQueue) {
-          applyIncidentUpdate(withPerspective);
         }
         setDetail(withPerspective);
       }
@@ -1035,8 +1048,11 @@ function IncidentsPageInner() {
     const wasUnread = isUnread(incident);
     const res = await incidentsAPI.markRead(incident.id);
     setMarkingReadId(null);
-    if (res) {
-      applyIncidentUpdate(res);
+    if (res.error === null) {
+      // Use the response body when present; otherwise enforce the read flags
+      // locally so the row's unread indicator clears even on 204 responses.
+      const base = res.data ?? incident;
+      applyIncidentUpdate({ ...base, is_read: true, is_new: false });
       if (wasUnread) {
         setUnreadCount((c) => Math.max(0, c - 1));
       }

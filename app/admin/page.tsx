@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
   Building2, CheckCircle, Users, Activity, Shield,
-  UserCheck, ClipboardList, ArrowRight, TrendingUp, Siren, Clock,
+  TrendingUp, Siren, Clock,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -19,7 +18,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import PageSection from "@/components/layout/PageSection";
 import StatCard from "@/components/dashboard/StatCard";
 import type { AdminDashboardData, Station } from "@/types";
-import { dashboardAPI, stationsAPI } from "@/lib/api";
+import { citizensAPI, dashboardAPI, operatorsAPI, stationsAPI } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const StationsMap = dynamic(() => import("@/components/admin/EnhancedStationsMap"), {
@@ -91,66 +90,114 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      dashboardAPI.admin(),
-      stationsAPI.list(),
-    ])
-      .then(([dashData, stationsData]) => {
+    let cancelled = false;
+
+    (async () => {
+      // Try the lightweight aggregate endpoint first, in parallel with the
+      // stations list (which we need anyway for the map).
+      const [dashData, stationsData] = await Promise.all([
+        dashboardAPI.admin(),
+        stationsAPI.list(),
+      ]);
+
+      if (cancelled) return;
+
+      const stationRows = stationsData ?? [];
+      setStations(stationRows);
+
+      if (dashData) {
         setData(dashData);
-        setStations(stationsData || []);
         setLoading(false);
-      })
-      .catch(err => {
-        console.error("Failed to load dashboard data:", err);
-        setLoading(false);
+        return;
+      }
+
+      // Fallback: the aggregate endpoint returned null (network error, server
+      // hiccup, etc.). Compute the same totals client-side from the list
+      // endpoints so the cards never get stuck on "—".
+      const [operatorsRes, citizensRes] = await Promise.all([
+        operatorsAPI.list(),
+        citizensAPI.list(),
+      ]);
+
+      if (cancelled) return;
+
+      const operators = operatorsRes?.data ?? [];
+      const citizens = citizensRes ?? [];
+
+      setData({
+        totals: {
+          stations_total: stationRows.length,
+          stations_active: stationRows.filter((s) => s.is_active).length,
+          stations_by_type: {
+            police: stationRows.filter((s) => s.type === "police").length,
+            medical: stationRows.filter((s) => s.type === "medical").length,
+            fire: stationRows.filter((s) => s.type === "fire").length,
+          },
+          operators_total: operators.length,
+          operators_active: operators.filter((o) => o.is_active).length,
+          citizens_total: citizens.length,
+        },
       });
+      setLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  const totals = data?.totals;
+  const stationsByType = totals?.stations_by_type ?? {};
+
   const donutData = [
-    { name: "Police", value: data?.stations_by_type?.police ?? 0, color: "var(--station-police)" },
-    { name: "Medical", value: data?.stations_by_type?.medical ?? 0, color: "var(--station-medical)" },
-    { name: "Fire", value: data?.stations_by_type?.fire ?? 0, color: "var(--station-fire)" },
+    { name: "Police", value: stationsByType.police ?? 0, color: "var(--station-police)" },
+    { name: "Medical", value: stationsByType.medical ?? 0, color: "var(--station-medical)" },
+    { name: "Fire", value: stationsByType.fire ?? 0, color: "var(--station-fire)" },
   ];
 
   const radialData = [
     {
       name: "Active Operators",
-      value: data?.total_operators
-        ? Math.round((data.active_operators / data.total_operators) * 100)
+      value: totals?.operators_total
+        ? Math.round((totals.operators_active / totals.operators_total) * 100)
         : 0,
       fill: "var(--primary)",
     },
     {
       name: "Active Stations",
-      value: data?.total_stations
-        ? Math.round((data.active_stations / data.total_stations) * 100)
+      value: totals?.stations_total
+        ? Math.round((totals.stations_active / totals.stations_total) * 100)
         : 0,
       fill: "var(--station-police)",
     },
   ];
 
   const stats = [
-    { label: "Total Stations", value: data?.total_stations, icon: Building2, variant: "primary" as const },
-    { label: "Active Stations", value: data?.active_stations, icon: CheckCircle, variant: "success" as const },
-    { label: "Total Operators", value: data?.total_operators, icon: Users, variant: "info" as const },
-    { label: "Active Operators", value: data?.active_operators, icon: Activity, variant: "success" as const },
-    { label: "Total Citizens", value: data?.total_citizens, icon: Shield, variant: "danger" as const },
+    { label: "Total Stations", value: totals?.stations_total, icon: Building2, variant: "primary" as const },
+    { label: "Active Stations", value: totals?.stations_active, icon: CheckCircle, variant: "success" as const },
+    { label: "Total Operators", value: totals?.operators_total, icon: Users, variant: "info" as const },
+    { label: "Active Operators", value: totals?.operators_active, icon: Activity, variant: "success" as const },
+    { label: "Total Citizens", value: totals?.citizens_total, icon: Shield, variant: "danger" as const },
   ];
 
-  const quickActions = [
-    { href: "/admin/stations", label: "Manage Stations", icon: Building2, desc: "Add, edit, or remove stations", soon: false },
-    { href: "/admin/operators", label: "Manage Operators", icon: Users, desc: "Create and manage operator accounts", soon: false },
-    { href: "/admin/citizens", label: "View Citizens", icon: UserCheck, desc: "Browse all registered citizens", soon: false },
-    { href: "/admin/kyc", label: "Review KYC", icon: ClipboardList, desc: "Review pending identity submissions", soon: false },
-    { href: "#", label: "Citizens App", icon: Shield, desc: "Manage citizen mobile app", soon: true },
-    { href: "#", label: "KYC Settings", icon: ClipboardList, desc: "Configure KYC requirements", soon: true },
-  ];
+  // Build the weekly trend from the backend's daily series when present, so
+  // the chart reflects real incident volume instead of the mock fixture.
+  const weeklyTrend = (() => {
+    const series = data?.trends?.daily_last_7;
+    if (!series || series.length === 0) return WEEKLY_TREND;
+    return series.map((point) => ({
+      day: new Date(point.date).toLocaleDateString(undefined, {
+        weekday: "short",
+      }),
+      incidents: point.total,
+    }));
+  })();
 
   return (
     <AppShell role="admin">
       <PageHeader
         title="Admin Dashboard"
-        subtitle="System overview and quick actions"
+        subtitle="System overview"
         actions={<LiveClock />}
       />
 
@@ -214,7 +261,7 @@ export default function AdminDashboardPage() {
                     />
                     <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
                       <tspan x="50%" dy="-6" fontSize="22" fontWeight="700" fill="var(--foreground)">
-                        {data?.total_stations ?? 0}
+                        {totals?.stations_total ?? 0}
                       </tspan>
                       <tspan x="50%" dy="20" fontSize="11" fill="var(--muted-foreground)">
                         stations
@@ -309,7 +356,7 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent className="px-5 pb-5">
             <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={WEEKLY_TREND} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
+              <AreaChart data={weeklyTrend} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="incidentGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.2} />
@@ -345,85 +392,6 @@ export default function AdminDashboardPage() {
                 />
               </AreaChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Card className="rounded-xl border py-0 shadow-card">
-          <CardHeader className="px-5 pt-5 pb-3">
-            <CardTitle className="flex items-center gap-2 text-section-title">
-              <Activity className="h-4 w-4 text-success" />
-              System Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 px-5 pb-5">
-            {[
-              { label: "API Server", uptime: "99.9%" },
-              { label: "Voice AI Service", uptime: "99.7%" },
-              { label: "Incident Routing", uptime: "100%" },
-              { label: "Notification Push", uptime: "98.5%" },
-            ].map(item => (
-              <div
-                key={item.label}
-                className="flex items-center justify-between rounded-lg bg-muted px-3 py-2.5"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-                  <span className="text-body font-medium">{item.label}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-data text-caption">{item.uptime}</span>
-                  <Badge variant="success" className="text-caption">
-                    Operational
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-xl border py-0 shadow-card lg:col-span-2">
-          <CardHeader className="px-5 pt-5 pb-3">
-            <CardTitle className="text-section-title">Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="px-5 pb-5">
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-              {quickActions.map(action =>
-                action.soon ? (
-                  <div
-                    key={action.label}
-                    className="flex cursor-not-allowed items-center gap-3 rounded-xl border border-border p-3.5 opacity-40"
-                  >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
-                      <action.icon className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="truncate text-caption font-semibold">{action.label}</p>
-                        <Badge variant="secondary" className="h-3.5 shrink-0 px-1 py-0 text-[9px]">
-                          Soon
-                        </Badge>
-                      </div>
-                      <p className="truncate text-caption">{action.desc}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <Link key={action.label} href={action.href}>
-                    <div className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border p-3.5 transition-all hover:border-primary/30 hover:shadow-card">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <action.icon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-caption font-semibold">{action.label}</p>
-                        <p className="truncate text-caption">{action.desc}</p>
-                      </div>
-                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                    </div>
-                  </Link>
-                )
-              )}
-            </div>
           </CardContent>
         </Card>
       </div>

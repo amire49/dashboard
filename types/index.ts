@@ -43,28 +43,194 @@ export interface AuthTokens {
   refresh: string;
 }
 
-export interface AdminDashboardData {
-  total_stations: number;
-  active_stations: number;
-  total_operators: number;
-  active_operators: number;
-  total_citizens: number;
-  stations_by_type: {
-    police: number;
-    medical: number;
-    fire: number;
+export interface AdminDashboardTotals {
+  stations_total: number;
+  stations_active: number;
+  stations_by_type: Partial<Record<StationType, number>>;
+  operators_total: number;
+  operators_active: number;
+  response_units_total?: number;
+  response_units_active?: number;
+  citizens_total: number;
+  citizens_verified?: number;
+  citizens_unverified?: number;
+}
+
+export interface AdminDashboardKycSummary {
+  approved: number;
+  rejected: number;
+  pending: number;
+  not_submitted: number;
+}
+
+export interface AdminDashboardIncidentKpis {
+  total: number;
+  resolved: number;
+  reached: number;
+  active: number;
+  false_alarm: number;
+  unrouted: number;
+  voice_failed: number;
+  resolution_rate_pct: number;
+  reached_rate_pct: number;
+  avg_route_to_reach_seconds: number;
+  avg_create_to_resolve_seconds: number;
+}
+
+export interface AdminDashboardIncidentWindow {
+  total: number;
+  resolved: number;
+  reached: number;
+  active: number;
+  false_alarm: number;
+  unrouted: number;
+  voice_failed: number;
+}
+
+export interface AdminDashboardIncidents {
+  kpis: AdminDashboardIncidentKpis;
+  service_breakdown: Record<string, number>;
+  category_breakdown: Record<string, number>;
+  status_counts: Record<string, number>;
+  windowed: {
+    today: AdminDashboardIncidentWindow;
+    last_7_days: AdminDashboardIncidentWindow;
+    last_30_days: AdminDashboardIncidentWindow;
+    last_365_days: AdminDashboardIncidentWindow;
+    all_time: AdminDashboardIncidentWindow;
   };
 }
 
-export interface OperatorDashboardData {
-  my_station: {
-    id: string;
-    name: string;
-    type: StationType;
+export interface AdminDashboardDailyTrendPoint {
+  date: string;
+  total: number;
+  resolved: number;
+}
+
+export interface AdminDashboardWeeklyTrendPoint {
+  week_start: string;
+  total: number;
+  resolved: number;
+}
+
+export interface AdminDashboardMonthlyTrendPoint {
+  month_start: string;
+  total: number;
+  resolved: number;
+}
+
+export interface AdminDashboardTrends {
+  daily_last_7: AdminDashboardDailyTrendPoint[];
+  daily_last_30: AdminDashboardDailyTrendPoint[];
+  weekly_last_12: AdminDashboardWeeklyTrendPoint[];
+  monthly_last_12: AdminDashboardMonthlyTrendPoint[];
+}
+
+export interface AdminDashboardTopStationResolver {
+  id: string;
+  name: string;
+  type: string;
+  city: string;
+  non_response_count: number;
+  reached_count: number;
+  resolved_count: number;
+  active_count: number;
+  total_assigned: number;
+}
+
+export interface AdminDashboardTopStationNonResponse {
+  id: string;
+  name: string;
+  type: string;
+  city: string;
+  non_response_count: number;
+}
+
+export interface AdminDashboardForwarding {
+  total_forwards: number;
+  by_kind: Record<string, number>;
+  last_7d: number;
+}
+
+export interface AdminDashboardSatisfaction {
+  average: number | null;
+  rated_count: number;
+}
+
+export interface AdminDashboardData {
+  generated_at?: string;
+  totals: AdminDashboardTotals;
+  kyc?: AdminDashboardKycSummary;
+  incidents?: AdminDashboardIncidents;
+  trends?: AdminDashboardTrends;
+  top_stations?: {
+    best_resolvers?: AdminDashboardTopStationResolver[];
+    most_non_response?: AdminDashboardTopStationNonResponse[];
   };
-  pending_incidents: number;
-  total_incidents_today: number;
-  recent_incidents: Incident[];
+  forwarding?: AdminDashboardForwarding;
+  satisfaction?: AdminDashboardSatisfaction;
+}
+
+export interface OperatorDashboardStation {
+  id: string;
+  name: string;
+  type: StationType;
+  city?: string;
+  is_active?: boolean;
+  non_response_count?: number;
+}
+
+export interface OperatorDashboardForwarding {
+  forwarded_in_count: number;
+  forwarded_away_count: number;
+  station_non_response_count: number;
+}
+
+export interface OperatorDashboardResponseUnits {
+  total: number;
+  active: number;
+  on_assignment: number;
+}
+
+export interface OperatorDashboardRecentIncident {
+  id: string;
+  status: IncidentStatus;
+  service_type?: string;
+  category?: string;
+  created_at: string;
+  assigned_station_at?: string | null;
+  address_line?: string;
+  reporter_name?: string | null;
+  assigned_unit_name?: string | null;
+  forward_chain?: ForwardChainStep[];
+}
+
+export interface OperatorDashboardActiveQueue {
+  active_total: number;
+  recent: OperatorDashboardRecentIncident[];
+}
+
+export interface OperatorDashboardData {
+  generated_at?: string;
+  my_station: OperatorDashboardStation;
+  kpis: AdminDashboardIncidentKpis;
+  incidents: {
+    windowed: {
+      today: AdminDashboardIncidentWindow;
+      last_7_days: AdminDashboardIncidentWindow;
+      last_30_days: AdminDashboardIncidentWindow;
+      last_365_days: AdminDashboardIncidentWindow;
+      all_time: AdminDashboardIncidentWindow;
+    };
+    service_breakdown: Record<string, number>;
+    category_breakdown: Record<string, number>;
+    status_counts: Record<string, number>;
+  };
+  trends?: AdminDashboardTrends;
+  forwarding?: OperatorDashboardForwarding;
+  response_units?: OperatorDashboardResponseUnits;
+  active_queue?: OperatorDashboardActiveQueue;
+  satisfaction?: AdminDashboardSatisfaction;
 }
 
 export type IncidentType = "fire" | "medical" | "crime" | "police" | string;
@@ -196,6 +362,7 @@ export interface Incident {
   // AI output
   amharic_text?: string;
   english_text?: string;
+  language?: string;
   confidence?: number | null;
   service_type?: string;
   voice_request_id?: string;

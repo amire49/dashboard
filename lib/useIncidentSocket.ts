@@ -29,6 +29,7 @@ function mapPayload(p: BackendIncidentPayload, existing?: Incident): Incident {
     updated_at: p.updated_at ?? existing?.updated_at,
     reporter: p.reporter ?? existing?.reporter ?? null,
     confidence: p.confidence ?? existing?.confidence ?? null,
+    language: p.language ?? existing?.language ?? "amharic",
     amharic_text: p.amharic_text ?? existing?.amharic_text,
     english_text: p.english_text ?? existing?.english_text,
     audio_url: p.audio_url ?? existing?.audio_url,

@@ -335,7 +335,7 @@ export const incidentsAPI = {
   },
 
   markRead(id: string) {
-    return request<Incident>(`/api/operator/incidents/${id}/read/`, {
+    return requestWithError<Incident>(`/api/operator/incidents/${id}/read/`, {
       method: "POST",
     });
   },

@@ -206,13 +206,13 @@ export default function OperatorDashboardPage() {
       <div className="mb-6 grid grid-cols-2 gap-4">
         <StatCard
           label="Pending Incidents"
-          value={data?.pending_incidents ?? "—"}
+          value={data?.kpis?.active ?? "—"}
           icon={AlertOctagon}
           variant="warning"
         />
         <StatCard
           label="Total Today"
-          value={data?.total_incidents_today ?? "—"}
+          value={data?.incidents?.windowed?.today?.total ?? "—"}
           icon={BarChart3}
           variant="info"
         />
@@ -299,7 +299,7 @@ export default function OperatorDashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {!data?.recent_incidents || data.recent_incidents.length === 0 ? (
+            {!data?.active_queue?.recent || data.active_queue.recent.length === 0 ? (
               <EmptyState
                 icon={CircleCheck}
                 title="All clear"
@@ -317,7 +317,7 @@ export default function OperatorDashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.recent_incidents.map((incident) => (
+                  {data.active_queue.recent.map((incident) => (
                     <TableRow
                       key={incident.id}
                       className="cursor-pointer transition-colors hover:bg-muted/50"
@@ -333,7 +333,9 @@ export default function OperatorDashboardPage() {
                             strokeWidth={1.75}
                           />
                           <span className="text-sm">
-                            {incident.address_line || "Location unavailable"}
+                            {incident.address_line ||
+                              incident.reporter_name ||
+                              "Location unavailable"}
                           </span>
                         </div>
                       </TableCell>

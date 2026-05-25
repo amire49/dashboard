@@ -43,6 +43,7 @@ export type BackendIncidentPayload = {
   reporter?: { id: string; full_name: string; phone: string } | null;
   assigned_station?: unknown;
   confidence?: number | null;
+  language?: string;
   amharic_text?: string;
   english_text?: string;
   audio_url?: string;
