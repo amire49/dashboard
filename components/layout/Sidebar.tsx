@@ -89,8 +89,8 @@ export default function Sidebar({ role }: SidebarProps) {
         </div>
         <div>
           <p className="text-sm font-bold tracking-tight text-foreground">ERAS</p>
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            {role === "admin" ? "ADMIN PANEL" : "OPERATOR"}
+          <p className="text-label">
+            {role === "admin" ? "Admin panel" : "Operator"}
           </p>
         </div>
       </div>
@@ -100,7 +100,7 @@ export default function Sidebar({ role }: SidebarProps) {
         {sections.map((section, si) => (
           <div key={si}>
             {section.label && (
-              <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <p className="mb-2 px-2 text-label">
                 {section.label}
               </p>
             )}
@@ -138,14 +138,14 @@ export default function Sidebar({ role }: SidebarProps) {
           <div className="mb-3 rounded-lg bg-muted/5 px-3 py-2.5 border border-border">
             <div className="flex items-center gap-2 mb-1">
               <Building2 className="h-3.5 w-3.5 text-primary" />
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <p className="text-label">
                 Station
               </p>
             </div>
             <p className="text-xs font-semibold text-foreground tracking-tight truncate">
               {user.station.name}
             </p>
-            <p className="text-[10px] text-muted-foreground capitalize">
+            <p className="text-caption capitalize">
               {user.station.type} Station
             </p>
           </div>
@@ -153,7 +153,7 @@ export default function Sidebar({ role }: SidebarProps) {
         
         <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-foreground transition-colors hover:bg-accent">
           <Avatar className="h-8 w-8 shrink-0">
-            <AvatarFallback className="bg-primary/10 text-[10px] font-bold text-primary">
+            <AvatarFallback className="bg-primary/10 text-caption font-bold text-primary">
               {user ? getInitials(user.full_name) : "??"}
             </AvatarFallback>
           </Avatar>
@@ -161,7 +161,7 @@ export default function Sidebar({ role }: SidebarProps) {
             <p className="truncate text-xs font-semibold tracking-tight text-foreground">
               {user?.full_name ?? "User"}
             </p>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <p className="text-caption uppercase tracking-wide text-muted-foreground">
               {user?.role ?? ""}
             </p>
           </div>

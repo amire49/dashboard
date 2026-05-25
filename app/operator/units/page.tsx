@@ -39,7 +39,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Sidebar from "@/components/layout/Sidebar";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import PageSection from "@/components/layout/PageSection";
+import EmptyState from "@/components/dashboard/EmptyState";
 import { unitsAPI } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/lib/useToast";
@@ -155,43 +158,22 @@ export default function OperatorUnitsPage() {
 
   if (checking) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <AppShell role="operator">
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar role="operator" />
-
-      <main className="flex-1 overflow-y-auto bg-background p-6">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-xl"
-              style={{
-                backgroundColor:
-                  "color-mix(in oklch, var(--primary) 12%, transparent)",
-                color: "var(--primary)",
-              }}
-            >
-              <Truck className="h-5 w-5" />
-            </div>
-            <div>
-              <h1
-                className="text-2xl font-bold"
-                style={{ letterSpacing: "-0.03em" }}
-              >
-                Response units
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {units.length} at your station
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
+    <AppShell role="operator">
+      <PageHeader
+        icon={Truck}
+        title="Response units"
+        subtitle={`${units.length} at your station`}
+        actions={
+          <>
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input
                 type="checkbox"
@@ -201,184 +183,165 @@ export default function OperatorUnitsPage() {
               />
               Show inactive
             </label>
-            <Button
-              onClick={() => setShowForm(true)}
-              className="gap-2 rounded-xl"
-            >
+            <Button onClick={() => setShowForm(true)} className="gap-2 rounded-xl">
               <Plus className="h-4 w-4" />
               Add unit
             </Button>
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        {tempPassword && (
-          <Alert
-            className="mb-6 rounded-xl border"
-            style={{
-              backgroundColor:
-                "color-mix(in oklch, var(--chart-4) 10%, transparent)",
-              borderColor: "color-mix(in oklch, var(--chart-4) 40%, transparent)",
-            }}
-          >
-            <KeyRound className="h-4 w-4" style={{ color: "var(--chart-4)" }} />
-            <AlertTitle className="font-semibold">Temporary password</AlertTitle>
-            <AlertDescription className="mt-1 flex items-center gap-3">
-              <code className="rounded-lg px-2.5 py-1 font-mono text-sm font-bold">
-                {tempPassword}
-              </code>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={copyPassword}
-                className="gap-1.5 rounded-lg"
-              >
-                {copied ? (
-                  <Check className="h-3 w-3" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-                {copied ? "Copied" : "Copy"}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
+      {tempPassword && (
+        <Alert className="mb-6 rounded-xl border border-warning/40 bg-warning-muted">
+          <KeyRound className="h-4 w-4 text-warning-foreground" />
+          <AlertTitle className="font-semibold">Temporary password</AlertTitle>
+          <AlertDescription className="mt-1 flex items-center gap-3">
+            <code className="rounded-lg px-2.5 py-1 font-mono text-sm font-bold">
+              {tempPassword}
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={copyPassword}
+              className="gap-1.5 rounded-lg"
+            >
+              {copied ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
-        <Dialog open={showForm} onOpenChange={setShowForm}>
-          <DialogContent className="sm:max-w-[520px]">
-            <DialogHeader>
-              <DialogTitle>New response unit</DialogTitle>
-              <DialogDescription>
-                Creates a field login for your station. Password is optional;
-                one will be generated if omitted.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold uppercase">
-                    Unit name
-                  </Label>
-                  <Input
-                    value={form.name}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, name: e.target.value }))
-                    }
-                    className="rounded-lg"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold uppercase">Type</Label>
-                  <Select
-                    value={form.unit_type}
-                    onValueChange={(v) =>
-                      setForm((f) => ({
-                        ...f,
-                        unit_type: v as ResponseUnitType,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="rounded-lg">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="individual">Individual</SelectItem>
-                      <SelectItem value="team">Team</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold uppercase">Phone</Label>
-                  <Input
-                    value={form.phone}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, phone: e.target.value }))
-                    }
-                    className="rounded-lg"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold uppercase">Email</Label>
-                  <Input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, email: e.target.value }))
-                    }
-                    className="rounded-lg"
-                    required
-                  />
-                </div>
-              </div>
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>New response unit</DialogTitle>
+            <DialogDescription>
+              Creates a field login for your station. Password is optional;
+              one will be generated if omitted.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase">
-                  Login full name (optional)
-                </Label>
+                <Label className="text-xs font-semibold uppercase">Unit name</Label>
                 <Input
-                  value={form.full_name}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, full_name: e.target.value }))
-                  }
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   className="rounded-lg"
-                  placeholder={form.name || "Same as unit name"}
+                  required
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase">
-                  Password (optional, min 6)
-                </Label>
-                <Input
-                  type="password"
-                  value={form.password}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, password: e.target.value }))
+                <Label className="text-xs font-semibold uppercase">Type</Label>
+                <Select
+                  value={form.unit_type}
+                  onValueChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      unit_type: v as ResponseUnitType,
+                    }))
                   }
-                  className="rounded-lg"
-                  minLength={6}
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-lg"
-                  onClick={() => {
-                    setShowForm(false);
-                    setForm(emptyForm);
-                  }}
-                  disabled={submitting}
                 >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={submitting} className="rounded-lg gap-2">
-                  {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {submitting ? "Creating…" : "Create unit"}
-                </Button>
+                  <SelectTrigger className="rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="individual">Individual</SelectItem>
+                    <SelectItem value="team">Team</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase">Phone</Label>
+                <Input
+                  value={form.phone}
+                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  className="rounded-lg"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase">Email</Label>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  className="rounded-lg"
+                  required
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold uppercase">
+                Login full name (optional)
+              </Label>
+              <Input
+                value={form.full_name}
+                onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+                className="rounded-lg"
+                placeholder={form.name || "Same as unit name"}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold uppercase">
+                Password (optional, min 6)
+              </Label>
+              <Input
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                className="rounded-lg"
+                minLength={6}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-lg"
+                onClick={() => {
+                  setShowForm(false);
+                  setForm(emptyForm);
+                }}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting} className="gap-2 rounded-lg">
+                {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {submitting ? "Creating…" : "Create unit"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
+      <PageSection title="Units">
         <Card className="overflow-hidden rounded-xl border shadow-sm">
-          <CardHeader className="border-b bg-muted/30 px-6 py-4">
-            <CardTitle className="text-lg font-bold">Units</CardTitle>
-          </CardHeader>
           <CardContent className="p-0">
             {loading ? (
               <div className="flex justify-center py-16">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : units.length === 0 ? (
-              <div className="flex flex-col items-center py-16 text-center">
-                <Truck className="mb-3 h-10 w-10 text-muted-foreground" />
-                <p className="font-semibold">No response units</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Add a unit to assign field teams to incidents.
-                </p>
-              </div>
+              <EmptyState
+                icon={Truck}
+                title="No response units"
+                description="Add a unit to assign field teams to incidents."
+                action={
+                  <Button onClick={() => setShowForm(true)} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Add unit
+                  </Button>
+                }
+              />
             ) : (
               <Table>
                 <TableHeader>
@@ -403,13 +366,7 @@ export default function OperatorUnitsPage() {
                           {u.is_active === false ? (
                             <Badge variant="secondary">Inactive</Badge>
                           ) : (
-                            <Badge
-                              style={{
-                                backgroundColor:
-                                  "color-mix(in oklch, var(--chart-3) 15%, transparent)",
-                                color: "var(--chart-3)",
-                              }}
-                            >
+                            <Badge className="border-success/20 bg-success-muted text-success">
                               Active
                             </Badge>
                           )}
@@ -438,7 +395,7 @@ export default function OperatorUnitsPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="gap-1 rounded-lg text-red-600"
+                            className="gap-1 rounded-lg text-destructive"
                             disabled={actingUnitId === u.id || u.is_on_assignment}
                             title={
                               u.is_on_assignment
@@ -463,7 +420,7 @@ export default function OperatorUnitsPage() {
             )}
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </PageSection>
+    </AppShell>
   );
 }

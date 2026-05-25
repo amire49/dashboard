@@ -1,18 +1,29 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
-import { Search, Filter, X, Building2, Activity, WifiOff, Satellite, Map as MapIcon } from "lucide-react";
+import {
+  Search,
+  Filter,
+  X,
+  Building2,
+  Activity,
+  WifiOff,
+  Satellite,
+  Map as MapIcon,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  STAT_CARD_VARIANTS,
+  stationTypeColor,
+  stationTypeStyle,
+  themeColor,
+} from "@/lib/status-styles";
+import { cn } from "@/lib/utils";
 import type { Station } from "@/types";
 
-// Station type colors and icons
-const STATION_CONFIG = {
-  police: { color: "#7c3aed", icon: "🚔", label: "Police" },
-  medical: { color: "#059669", icon: "🏥", label: "Medical" },
-  fire: { color: "#ef4444", icon: "🚒", label: "Fire" },
-};
+const STATION_TYPES = ["police", "medical", "fire"] as const;
 
 interface Props {
   stations: Station[];
@@ -23,85 +34,74 @@ export default function EnhancedStationsMap({ stations }: Props) {
   const mapRef = useRef<any>(null);
   const markersMapRef = useRef<Map<string, any>>(new Map());
   const tileLayerRef = useRef<any>(null);
-  
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(["police", "medical", "fire"]);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([...STATION_TYPES]);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isSatellite, setIsSatellite] = useState(false);
 
-  // Filter stations
   const filteredStations = useMemo(() => {
-    return stations.filter(station => {
+    return stations.filter((station) => {
       const matchesType = selectedTypes.includes(station.type.toLowerCase());
-      const matchesSearch = searchQuery === "" || 
+      const matchesSearch =
+        searchQuery === "" ||
         station.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         station.city.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesType && matchesSearch;
     });
   }, [stations, selectedTypes, searchQuery]);
 
-  // Statistics
   const stats = useMemo(() => {
     const total = stations.length;
     const byType = {
-      medical: stations.filter(s => s.type === "medical").length,
-      police: stations.filter(s => s.type === "police").length,
-      fire: stations.filter(s => s.type === "fire").length,
+      medical: stations.filter((s) => s.type === "medical").length,
+      police: stations.filter((s) => s.type === "police").length,
+      fire: stations.filter((s) => s.type === "fire").length,
     };
-    const online = stations.filter(s => s.is_active).length;
+    const online = stations.filter((s) => s.is_active).length;
     const offline = total - online;
     return { total, byType, online, offline };
   }, [stations]);
 
-  // Toggle type filter
   const toggleType = (type: string) => {
-    setSelectedTypes(prev =>
-      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    setSelectedTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
     );
   };
 
-  // Toggle satellite view
   const toggleSatellite = () => {
     if (!mapRef.current || !tileLayerRef.current) return;
 
     import("leaflet").then((L) => {
       const Leaflet = L.default || L;
-      
-      // Remove current tile layer
+
       if (tileLayerRef.current) {
         mapRef.current.removeLayer(tileLayerRef.current);
       }
 
-      // Add new tile layer based on view type
-      let newTileLayer;
-      if (!isSatellite) {
-        // Switch to satellite view
-        newTileLayer = Leaflet.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-          attribution: '© Esri, Maxar, Earthstar Geographics',
-          maxZoom: 19,
-        }).addTo(mapRef.current);
-      } else {
-        // Switch to vector view
-        newTileLayer = Leaflet.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-          attribution: '© OpenStreetMap, © CARTO',
-          maxZoom: 19,
-        }).addTo(mapRef.current);
-      }
+      const newTileLayer = !isSatellite
+        ? Leaflet.tileLayer(
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            { attribution: "© Esri, Maxar, Earthstar Geographics", maxZoom: 19 }
+          ).addTo(mapRef.current)
+        : Leaflet.tileLayer(
+            "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+            { attribution: "© OpenStreetMap, © CARTO", maxZoom: 19 }
+          ).addTo(mapRef.current);
 
       tileLayerRef.current = newTileLayer;
       setIsSatellite(!isSatellite);
     });
   };
 
-  // Zoom to station
   const zoomToStation = (station: Station) => {
     if (!mapRef.current) return;
     const lat = Number(station.lat ?? station.latitude ?? 0);
     const lng = Number(station.long ?? station.longitude ?? 0);
     mapRef.current.setView([lat, lng], 14, { animate: true });
-    
+
     const marker = markersMapRef.current.get(station.id);
     if (marker) {
       marker.openPopup();
@@ -109,7 +109,6 @@ export default function EnhancedStationsMap({ stations }: Props) {
     setSelectedStation(station);
   };
 
-  // Initialize map
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
@@ -117,14 +116,13 @@ export default function EnhancedStationsMap({ stations }: Props) {
 
     import("leaflet").then((L) => {
       if (!mounted || mapRef.current || !containerRef.current) return;
-      
+
       const container = containerRef.current;
       if ((container as any)._leaflet_id) return;
 
       try {
         const Leaflet = L.default || L;
-        
-        // Create map
+
         const map = Leaflet.map(container, {
           center: [9.0, 38.75],
           zoom: 7,
@@ -132,11 +130,10 @@ export default function EnhancedStationsMap({ stations }: Props) {
           preferCanvas: true,
         });
 
-        // Add default tile layer (vector map)
-        const tileLayer = Leaflet.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-          attribution: '© OpenStreetMap, © CARTO',
-          maxZoom: 19,
-        }).addTo(map);
+        const tileLayer = Leaflet.tileLayer(
+          "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+          { attribution: "© OpenStreetMap, © CARTO", maxZoom: 19 }
+        ).addTo(map);
 
         tileLayerRef.current = tileLayer;
         mapRef.current = map;
@@ -144,7 +141,7 @@ export default function EnhancedStationsMap({ stations }: Props) {
       } catch (err) {
         console.error("Error initializing map:", err);
       }
-    }).catch(err => {
+    }).catch((err) => {
       console.error("Error loading Leaflet:", err);
     });
 
@@ -153,7 +150,9 @@ export default function EnhancedStationsMap({ stations }: Props) {
       if (mapRef.current) {
         try {
           mapRef.current.remove();
-        } catch (e) {}
+        } catch {
+          /* ignore cleanup errors */
+        }
         mapRef.current = null;
       }
       if (containerRef.current) {
@@ -163,31 +162,34 @@ export default function EnhancedStationsMap({ stations }: Props) {
     };
   }, []);
 
-  // Update markers
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) return;
 
     import("leaflet").then((L) => {
       const Leaflet = L.default || L;
-      
-      // Clear existing markers
-      markersMapRef.current.forEach(marker => {
+
+      markersMapRef.current.forEach((marker) => {
         try {
           marker.remove();
-        } catch (e) {}
+        } catch {
+          /* ignore cleanup errors */
+        }
       });
       markersMapRef.current.clear();
 
+      const offlineColor = themeColor("destructive");
+
       filteredStations.forEach((station) => {
-        const config = STATION_CONFIG[station.type.toLowerCase() as keyof typeof STATION_CONFIG] || STATION_CONFIG.police;
+        const cfg = stationTypeStyle(station.type);
+        const color = stationTypeColor(station.type);
         const lat = Number(station.lat ?? station.latitude ?? 0);
         const lng = Number(station.long ?? station.longitude ?? 0);
-        
+
         const iconHtml = `
           <div style="
             width: 40px;
             height: 40px;
-            background: ${config.color};
+            background: ${color};
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
             display: flex;
@@ -197,14 +199,14 @@ export default function EnhancedStationsMap({ stations }: Props) {
             border: 3px solid white;
             position: relative;
           ">
-            <span style="font-size: 18px; transform: rotate(45deg);">${config.icon}</span>
-            ${!station.is_active ? '<div style="position: absolute; top: -2px; right: -2px; width: 12px; height: 12px; background: #ef4444; border: 2px solid white; border-radius: 50%; transform: rotate(45deg);"></div>' : ''}
-          </div>
-        `;
+            <span style="font-size: 14px; font-weight: 700; color: white; transform: rotate(45deg);">${cfg.label.charAt(0)}</span>
+            ${!station.is_active ? `<motion.div style="position: absolute; top: -2px; right: -2px; width: 12px; height: 12px; background: ${offlineColor}; border: 2px solid white; border-radius: 50%; transform: rotate(45deg);"></motion.div>` : ""}
+          </motion.div>
+        `.replace(/<\/?motion\./g, (m) => m.replace("motion.", ""));
 
         const icon = Leaflet.divIcon({
           html: iconHtml,
-          className: 'custom-marker-wrapper',
+          className: "custom-marker-wrapper",
           iconSize: [40, 40],
           iconAnchor: [20, 40],
           popupAnchor: [0, -40],
@@ -212,52 +214,51 @@ export default function EnhancedStationsMap({ stations }: Props) {
 
         const marker = Leaflet.marker([lat, lng], { icon });
 
-        marker.bindPopup(`
-          <div style="font-family: system-ui, sans-serif;">
-            <div style="padding: 12px; background: ${config.color}; color: white; margin: -15px -20px 10px -20px; border-radius: 12px 12px 0 0;">
-              <div style="font-size: 24px; margin-bottom: 4px;">${config.icon}</div>
+        marker.bindPopup(
+          `
+          <motion.div style="font-family: system-ui, sans-serif;">
+            <motion.div style="padding: 12px; background: ${color}; color: white; margin: -15px -20px 10px -20px; border-radius: 12px 12px 0 0;">
               <h3 style="margin: 0; font-size: 16px; font-weight: 700;">${station.name}</h3>
-              <div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">
-                ${config.label} • ${station.is_active ? '🟢 Active' : '🔴 Offline'}
-              </div>
-            </div>
-            <div style="padding: 0 4px;">
-              <div style="margin-bottom: 8px;">
-                <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: #6b7280; margin-bottom: 2px;">Location</div>
-                <div style="font-size: 13px;">${station.address}, ${station.city}</div>
-              </div>
-              <div style="margin-bottom: 8px;">
-                <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: #6b7280; margin-bottom: 2px;">Contact</div>
-                <div style="font-size: 13px;">
-                  📞 <a href="tel:${station.phone}">${station.phone}</a><br/>
-                  ✉️ <a href="mailto:${station.email}">${station.email}</a>
-                </div>
-              </div>
-              <div style="text-align: center; padding: 12px; background: #f9fafb; border-radius: 8px; border: 2px solid ${config.color}; margin-bottom: 8px;">
-                <div style="font-size: 24px; font-weight: 700; color: ${config.color};">${station.capacity}</div>
-                <div style="font-size: 10px; text-transform: uppercase; color: #6b7280; font-weight: 600;">Personnel Capacity</div>
-              </div>
-              <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" 
-                 target="_blank" 
-                 style="display: block; width: 100%; padding: 10px; border-radius: 8px; background: ${config.color}; color: white; text-align: center; font-weight: 600; font-size: 13px; text-decoration: none;">
-                🧭 Get Directions
+              <motion.div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">
+                ${cfg.label} • ${station.is_active ? "Active" : "Inactive"}
+              </motion.div>
+            </motion.div>
+            <motion.div style="padding: 0 4px;">
+              <motion.div style="margin-bottom: 8px;">
+                <motion.div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 2px;">Location</motion.div>
+                <motion.div style="font-size: 13px;">${station.address}, ${station.city}</motion.div>
+              </motion.div>
+              <motion.div style="margin-bottom: 8px;">
+                <motion.div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 2px;">Contact</motion.div>
+                <motion.div style="font-size: 13px;">
+                  <a href="tel:${station.phone}">${station.phone}</a><br/>
+                  <a href="mailto:${station.email}">${station.email}</a>
+                </motion.div>
+              </motion.div>
+              <motion.div style="text-align: center; padding: 12px; background: var(--surface-subtle); border-radius: 8px; border: 2px solid ${color}; margin-bottom: 8px;">
+                <motion.div style="font-size: 24px; font-weight: 700; color: ${color};">${station.capacity}</motion.div>
+                <motion.div style="font-size: 10px; text-transform: uppercase; color: var(--muted-foreground); font-weight: 600;">Personnel Capacity</motion.div>
+              </motion.div>
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}"
+                 target="_blank"
+                 style="display: block; width: 100%; padding: 10px; border-radius: 8px; background: ${color}; color: white; text-align: center; font-weight: 600; font-size: 13px; text-decoration: none;">
+                Get Directions
               </a>
-            </div>
-          </div>
-        `, {
-          maxWidth: 300,
-        });
+            </motion.div>
+          </motion.div>
+        `.replace(/<\/?motion\./g, (m) => m.replace("motion.", "")),
+          { maxWidth: 300 }
+        );
 
         marker.addTo(mapRef.current);
         markersMapRef.current.set(station.id, marker);
       });
 
-      // Fit bounds
       if (filteredStations.length > 0 && mapRef.current) {
         const bounds = Leaflet.latLngBounds(
           filteredStations.map((s) => [
             Number(s.lat ?? s.latitude ?? 0),
-            Number(s.long ?? s.longitude ?? 0)
+            Number(s.long ?? s.longitude ?? 0),
           ])
         );
         mapRef.current.fitBounds(bounds, { padding: [80, 80], maxZoom: 11 });
@@ -265,21 +266,31 @@ export default function EnhancedStationsMap({ stations }: Props) {
     });
   }, [filteredStations, mapLoaded]);
 
+  const totalVariant = STAT_CARD_VARIANTS.info;
+  const onlineVariant = STAT_CARD_VARIANTS.success;
+  const offlineVariant = STAT_CARD_VARIANTS.danger;
+
   return (
-    <div className="relative w-full h-full flex">
-      {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 bg-white/95 backdrop-blur-lg border-r border-gray-200 overflow-hidden flex flex-col`}>
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-lg">Stations</h3>
+    <div className="relative flex h-full w-full">
+      <div
+        className={cn(
+          "flex flex-col overflow-hidden border-r border-border bg-card/95 backdrop-blur-lg transition-all duration-300",
+          sidebarOpen ? "w-80" : "w-0"
+        )}
+      >
+        <div className="border-b border-border p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-section-title">Stations</h3>
             <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(false)}>
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" strokeWidth={1.75} />
             </Button>
           </div>
-          
-          {/* Search */}
+
           <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              strokeWidth={1.75}
+            />
             <Input
               placeholder="Search stations..."
               value={searchQuery}
@@ -287,58 +298,73 @@ export default function EnhancedStationsMap({ stations }: Props) {
               className="pl-9"
             />
           </div>
-          
-          {/* Filters */}
+
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Filters</div>
-            {Object.entries(STATION_CONFIG).map(([type, config]) => (
-              <button
-                key={type}
-                onClick={() => toggleType(type)}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
-                  selectedTypes.includes(type)
-                    ? 'bg-gray-100 border-2'
-                    : 'bg-white border-2 border-transparent opacity-50'
-                }`}
-                style={{ borderColor: selectedTypes.includes(type) ? config.color : 'transparent' }}
-              >
-                <span className="text-lg">{config.icon}</span>
-                <span className="flex-1 text-left text-sm font-medium">{config.label}</span>
-                <Badge variant="secondary" className="text-xs">
-                  {stats.byType[type as keyof typeof stats.byType]}
-                </Badge>
-              </button>
-            ))}
+            <div className="text-label mb-2">Filters</div>
+            {STATION_TYPES.map((type) => {
+              const cfg = stationTypeStyle(type);
+              const Icon = cfg.icon;
+              const selected = selectedTypes.includes(type);
+
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => toggleType(type)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-lg border-2 px-3 py-2 transition-all",
+                    selected
+                      ? cn("bg-muted/50", cfg.border)
+                      : "border-transparent bg-card opacity-50"
+                  )}
+                >
+                  <Icon className={cn("h-4 w-4", cfg.text)} strokeWidth={1.75} />
+                  <span className="flex-1 text-left text-sm font-medium">{cfg.label}</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {stats.byType[type]}
+                  </Badge>
+                </button>
+              );
+            })}
           </div>
         </div>
-        
-        {/* Station List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Stations ({filteredStations.length})
-          </div>
+
+        <div className="flex-1 space-y-2 overflow-y-auto p-4">
+          <div className="text-label mb-2">Stations ({filteredStations.length})</div>
           {filteredStations.map((station) => {
-            const config = STATION_CONFIG[station.type.toLowerCase() as keyof typeof STATION_CONFIG];
+            const cfg = stationTypeStyle(station.type);
+            const Icon = cfg.icon;
+
             return (
               <button
                 key={station.id}
+                type="button"
                 onClick={() => zoomToStation(station)}
-                className={`w-full text-left p-3 rounded-xl border-2 transition-all hover:shadow-md ${
+                className={cn(
+                  "w-full rounded-xl border-2 p-3 text-left transition-all hover:shadow-card",
                   selectedStation?.id === station.id
-                    ? 'bg-gray-50 border-gray-300'
-                    : 'bg-white border-gray-100 hover:border-gray-200'
-                }`}
+                    ? "border-border bg-muted/50"
+                    : "border-border/50 bg-card hover:border-border"
+                )}
               >
                 <div className="flex items-start gap-3">
-                  <div className="text-2xl">{config.icon}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate">{station.name}</div>
-                    <div className="text-xs text-gray-500 truncate">{station.city}</div>
-                    <div className="flex items-center gap-2 mt-1">
+                  <div
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                      cfg.bg,
+                      cfg.text
+                    )}
+                  >
+                    <Icon className="h-4 w-4" strokeWidth={1.75} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{station.name}</div>
+                    <div className="truncate text-caption">{station.city}</div>
+                    <div className="mt-1 flex items-center gap-2">
                       {station.is_active ? (
-                        <span className="text-xs text-green-600">🟢 Active</span>
+                        <span className="text-xs font-medium text-success">Active</span>
                       ) : (
-                        <span className="text-xs text-gray-400">🔴 Offline</span>
+                        <span className="text-caption">Inactive</span>
                       )}
                     </div>
                   </div>
@@ -349,84 +375,98 @@ export default function EnhancedStationsMap({ stations }: Props) {
         </div>
       </div>
 
-      {/* Map Container */}
-      <div className="flex-1 relative">
-        {/* Toggle Sidebar Button */}
+      <div className="relative flex-1">
         {!sidebarOpen && (
           <Button
             onClick={() => setSidebarOpen(true)}
-            className="absolute top-4 left-4 z-[1000] shadow-lg"
+            className="absolute left-4 top-4 z-[1000] shadow-card"
             size="sm"
           >
-            <Filter className="h-4 w-4 mr-2" />
+            <Filter className="mr-2 h-4 w-4" strokeWidth={1.75} />
             Filters
           </Button>
         )}
 
-        {/* Statistics Cards */}
-        <div className="absolute top-4 right-4 z-[1000] flex gap-3">
-          <div className="bg-white/90 backdrop-blur-lg rounded-2xl shadow-lg p-4 border border-gray-200">
+        <div className="absolute right-4 top-4 z-[1000] flex gap-3">
+          <div className="rounded-2xl border border-border bg-card/90 p-4 shadow-card backdrop-blur-lg">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
-                <Building2 className="h-5 w-5 text-blue-600" />
+              <div
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-xl",
+                  totalVariant.iconBg
+                )}
+              >
+                <Building2 className={cn("h-5 w-5", totalVariant.iconColor)} strokeWidth={1.75} />
               </div>
               <div>
                 <div className="text-2xl font-bold">{stats.total}</div>
-                <div className="text-xs text-gray-500">Total Stations</div>
+                <div className="text-caption">Total Stations</div>
               </div>
             </div>
           </div>
-          
-          <div className="bg-white/90 backdrop-blur-lg rounded-2xl shadow-lg p-4 border border-gray-200">
+
+          <div className="rounded-2xl border border-border bg-card/90 p-4 shadow-card backdrop-blur-lg">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100">
-                <Activity className="h-5 w-5 text-green-600" />
+              <div
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-xl",
+                  onlineVariant.iconBg
+                )}
+              >
+                <Activity className={cn("h-5 w-5", onlineVariant.iconColor)} strokeWidth={1.75} />
               </div>
               <div>
-                <div className="text-2xl font-bold text-green-600">{stats.online}</div>
-                <div className="text-xs text-gray-500">Online</div>
+                <div className={cn("text-2xl font-bold", onlineVariant.iconColor)}>
+                  {stats.online}
+                </div>
+                <div className="text-caption">Online</div>
               </div>
             </div>
           </div>
-          
+
           {stats.offline > 0 && (
-            <div className="bg-white/90 backdrop-blur-lg rounded-2xl shadow-lg p-4 border border-gray-200">
+            <div className="rounded-2xl border border-border bg-card/90 p-4 shadow-card backdrop-blur-lg">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100">
-                  <WifiOff className="h-5 w-5 text-red-600" />
+                <div
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-xl",
+                    offlineVariant.iconBg
+                  )}
+                >
+                  <WifiOff className={cn("h-5 w-5", offlineVariant.iconColor)} strokeWidth={1.75} />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-red-600">{stats.offline}</div>
-                  <div className="text-xs text-gray-500">Offline</div>
+                  <div className={cn("text-2xl font-bold", offlineVariant.iconColor)}>
+                    {stats.offline}
+                  </div>
+                  <div className="text-caption">Offline</div>
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Satellite Toggle Button */}
         <Button
           onClick={toggleSatellite}
-          className="absolute bottom-4 right-4 z-[1000] shadow-lg bg-white/90 backdrop-blur-lg hover:bg-white border border-gray-200"
+          className="absolute bottom-4 right-4 z-[1000] border border-border bg-card/90 shadow-card backdrop-blur-lg hover:bg-card"
           size="sm"
           variant="outline"
         >
           {isSatellite ? (
             <>
-              <MapIcon className="h-4 w-4 mr-2" />
-              <span className="text-gray-700">Map View</span>
+              <MapIcon className="mr-2 h-4 w-4" strokeWidth={1.75} />
+              <span className="text-foreground">Map View</span>
             </>
           ) : (
             <>
-              <Satellite className="h-4 w-4 mr-2" />
-              <span className="text-gray-700">Satellite</span>
+              <Satellite className="mr-2 h-4 w-4" strokeWidth={1.75} />
+              <span className="text-foreground">Satellite</span>
             </>
           )}
         </Button>
 
-        {/* Map */}
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <div ref={containerRef} className="w-full h-full" style={{ minHeight: '600px' }} />
+        <div ref={containerRef} className="h-full w-full" style={{ minHeight: "600px" }} />
       </div>
     </div>
   );

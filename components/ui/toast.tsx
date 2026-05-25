@@ -44,7 +44,7 @@ const variantConfig: Record<
   }
 > = {
   default: {
-    card: "bg-card/95 border-border/80 text-foreground shadow-xl shadow-black/5",
+    card: "border-border/80 bg-card/95 text-foreground shadow-popover",
     accent: "bg-foreground/80",
     iconWrap: "bg-muted",
     icon: "text-foreground",
@@ -52,43 +52,43 @@ const variantConfig: Record<
     Icon: Bell,
   },
   success: {
-    card: "bg-card/95 border-emerald-200/80 text-foreground shadow-xl shadow-emerald-500/10",
-    accent: "bg-emerald-500",
-    iconWrap: "bg-emerald-500/12",
-    icon: "text-emerald-600",
-    progress: "bg-emerald-500/50",
+    card: "border-success/20 bg-card/95 text-foreground shadow-popover",
+    accent: "bg-success",
+    iconWrap: "bg-success-muted",
+    icon: "text-success",
+    progress: "bg-success/50",
     Icon: CheckCircle2,
   },
   error: {
-    card: "bg-card/95 border-red-200/80 text-foreground shadow-xl shadow-red-500/10",
-    accent: "bg-red-500",
-    iconWrap: "bg-red-500/12",
-    icon: "text-red-600",
-    progress: "bg-red-500/50",
+    card: "border-destructive/20 bg-card/95 text-foreground shadow-popover",
+    accent: "bg-destructive",
+    iconWrap: "bg-destructive/10",
+    icon: "text-destructive",
+    progress: "bg-destructive/50",
     Icon: AlertCircle,
   },
   warning: {
-    card: "bg-card/95 border-amber-200/80 text-foreground shadow-xl shadow-amber-500/10",
-    accent: "bg-amber-500",
-    iconWrap: "bg-amber-500/12",
-    icon: "text-amber-600",
-    progress: "bg-amber-500/50",
+    card: "border-warning/25 bg-card/95 text-foreground shadow-popover",
+    accent: "bg-warning",
+    iconWrap: "bg-warning-muted",
+    icon: "text-warning-foreground",
+    progress: "bg-warning/50",
     Icon: AlertTriangle,
   },
   info: {
-    card: "bg-card/95 border-blue-200/80 text-foreground shadow-xl shadow-blue-500/10",
-    accent: "bg-blue-500",
-    iconWrap: "bg-blue-500/12",
-    icon: "text-blue-600",
-    progress: "bg-blue-500/50",
+    card: "border-info/20 bg-card/95 text-foreground shadow-popover",
+    accent: "bg-info",
+    iconWrap: "bg-info-muted",
+    icon: "text-info",
+    progress: "bg-info/50",
     Icon: Info,
   },
   emergency: {
-    card: "bg-card/95 border-red-300/90 text-foreground shadow-2xl shadow-red-500/20 ring-1 ring-red-500/20",
-    accent: "bg-red-600",
-    iconWrap: "bg-red-500/15",
-    icon: "text-red-600",
-    progress: "bg-red-600/60",
+    card: "border-primary/30 bg-card/95 text-foreground shadow-popover ring-1 ring-primary/20",
+    accent: "bg-primary",
+    iconWrap: "bg-primary/10",
+    icon: "text-primary",
+    progress: "bg-primary/60",
     Icon: Siren,
   },
 };
@@ -143,7 +143,7 @@ export function Toast({
 
         <div className="min-w-0 flex-1 pt-0.5">
           {variant === "emergency" && (
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-red-600">
+            <p className="text-label mb-1 text-primary">
               Emergency alert
             </p>
           )}

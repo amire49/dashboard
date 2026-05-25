@@ -3,48 +3,50 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import {
-  IconAlertHexagon,
-  IconRadar,
-  IconRefresh,
-  IconLayoutList,
-  IconMap2,
-  IconChartBar,
-  IconProgress,
-  IconCircleCheck,
-  IconAdjustmentsHorizontal,
-  IconTag,
-  IconUser,
-  IconBuildingHospital,
-  IconActivity,
-  IconClockHour4,
-  IconStethoscope,
-  IconShield,
-  IconFlame,
-  IconCircleDashed,
-  IconX,
-  IconChevronRight,
-  IconInboxOff,
-  IconMapPin,
-  IconFileText,
-  IconVolume,
-  IconNavigation,
-  IconPlayerPlay,
-  IconPlayerPause,
-  IconLoader2,
-  IconMail,
-  IconHistory,
-} from "@tabler/icons-react";
+  AlertOctagon,
+  Radar,
+  RefreshCw,
+  LayoutList,
+  Map,
+  BarChart3,
+  Loader,
+  CircleCheck,
+  SlidersHorizontal,
+  Tag,
+  User,
+  Hospital,
+  Activity,
+  Clock,
+  X,
+  ChevronRight,
+  MapPin,
+  FileText,
+  Volume2,
+  Navigation,
+  Play,
+  Pause,
+  Loader2,
+  Mail,
+  History,
+  Copy,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import Sidebar from "@/components/layout/Sidebar";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import StatCard from "@/components/dashboard/StatCard";
+import EmptyState from "@/components/dashboard/EmptyState";
+import FilterBar from "@/components/dashboard/FilterBar";
+import StatusBadge from "@/components/incidents/StatusBadge";
+import CategoryBadge from "@/components/incidents/CategoryBadge";
+import { statusFilterLabel, categoryStyle } from "@/lib/status-styles";
+import { cn } from "@/lib/utils";
 import { incidentsAPI } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
@@ -75,7 +77,7 @@ const IncidentMap = dynamic(() => import("@/components/incidents/IncidentMap"), 
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center rounded-xl bg-muted/30">
-      <IconLoader2 size={24} stroke={1.5} className="animate-spin text-muted-foreground" />
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
     </div>
   ),
 });
@@ -84,7 +86,7 @@ const InlineMap = dynamic(() => import("@/components/incidents/InlineMap"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center bg-muted/30">
-      <IconLoader2 size={20} stroke={1.5} className="animate-spin text-muted-foreground" />
+      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
     </div>
   ),
 });
@@ -124,26 +126,23 @@ class IncidentsErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar role="operator" />
-          <main className="flex-1 overflow-y-auto bg-background p-6">
-            <div className="flex items-center gap-4 rounded-xl border border-red-200 bg-red-50 p-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100">
-                <IconAlertHexagon size={20} stroke={1.5} className="text-red-600" />
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold text-red-600">Something went wrong</p>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  An unexpected error occurred. Please refresh the page.
-                </p>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-                <IconRefresh size={16} stroke={1.5} className="mr-1.5" />
-                Reload
-              </Button>
+        <AppShell role="operator">
+          <div className="flex items-center gap-4 rounded-xl border border-destructive/25 bg-destructive/5 p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-destructive/10">
+              <AlertOctagon className="h-5 w-5 text-destructive" strokeWidth={1.75} />
             </div>
-          </main>
-        </div>
+            <div className="flex-1">
+              <p className="font-semibold text-destructive">Something went wrong</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                An unexpected error occurred. Please refresh the page.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              <RefreshCw className="mr-1.5 h-4 w-4" strokeWidth={1.75} />
+              Reload
+            </Button>
+          </div>
+        </AppShell>
       );
     }
     return this.props.children;
@@ -292,7 +291,7 @@ function AudioPlayer({ url }: { url: string }) {
         disabled={!ready}
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
       >
-        {isPlaying ? <IconPlayerPause size={16} stroke={1.5} /> : <IconPlayerPlay size={16} stroke={1.5} className="ml-0.5" />}
+        {isPlaying ? <Pause className="h-4 w-4" strokeWidth={1.75} /> : <Play className="h-4 w-4 ml-0.5" strokeWidth={1.75} />}
       </button>
       <div className="flex-1">
         <input
@@ -301,7 +300,7 @@ function AudioPlayer({ url }: { url: string }) {
           disabled={!ready}
           className="w-full h-1 bg-muted rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0"
         />
-        <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+        <div className="text-data mt-1 flex justify-between text-muted-foreground">
           <span>{formatTime(currentTime)}</span>
           <span>{formatTime(duration)}</span>
         </div>
@@ -310,130 +309,21 @@ function AudioPlayer({ url }: { url: string }) {
   );
 }
 
-// ── Status / Category helpers ─────────────────────────────────────────────────
-
-function statusFilterLabel(s: FilterStatus): string {
-  if (s === "all") return "All Statuses";
-  return s.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const s = normalizeIncidentStatus(status);
-  
-  const statusConfig: Record<string, { bg: string; text: string; border: string; dot: string; label: string }> = {
-    pending: { 
-      bg: "bg-gray-50", 
-      text: "text-gray-500", 
-      border: "border-gray-200", 
-      dot: "bg-gray-500",
-      label: "Pending"
-    },
-    routed: { 
-      bg: "bg-red-50", 
-      text: "text-red-600", 
-      border: "border-red-200", 
-      dot: "bg-red-600",
-      label: "Routed"
-    },
-    dispatched: { 
-      bg: "bg-orange-50", 
-      text: "text-orange-600", 
-      border: "border-orange-200", 
-      dot: "bg-orange-600",
-      label: "Dispatched"
-    },
-    en_route: { 
-      bg: "bg-yellow-50", 
-      text: "text-yellow-700", 
-      border: "border-yellow-200", 
-      dot: "bg-yellow-700",
-      label: "En Route"
-    },
-    reached: { 
-      bg: "bg-purple-50", 
-      text: "text-purple-600", 
-      border: "border-purple-200", 
-      dot: "bg-purple-600",
-      label: "Reached"
-    },
-    served: { 
-      bg: "bg-green-50", 
-      text: "text-green-600", 
-      border: "border-green-200", 
-      dot: "bg-green-600",
-      label: "Served"
-    },
-    resolved: { 
-      bg: "bg-teal-50", 
-      text: "text-teal-700", 
-      border: "border-teal-200", 
-      dot: "bg-teal-700",
-      label: "Resolved"
-    },
-    false_alarm: { 
-      bg: "bg-gray-50", 
-      text: "text-gray-500", 
-      border: "border-gray-200", 
-      dot: "bg-gray-500",
-      label: "False Alarm"
-    },
-    in_progress: { 
-      bg: "bg-yellow-50", 
-      text: "text-yellow-700", 
-      border: "border-yellow-200", 
-      dot: "bg-yellow-700",
-      label: "In Progress"
-    },
-  };
-
-  const config = statusConfig[s] || statusConfig.pending;
-  
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${config.bg} ${config.text} ${config.border}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${config.dot} ${s === 'routed' ? 'animate-pulse' : ''}`} />
-      {config.label}
-    </span>
-  );
-}
-
-const CATEGORY_CONFIG: Record<string, { color: string; bgColor: string; borderColor: string; icon: React.ElementType }> = {
-  fire:    { color: "text-red-600", bgColor: "bg-red-50", borderColor: "border-red-200", icon: IconFlame },
-  medical: { color: "text-green-600", bgColor: "bg-green-50", borderColor: "border-green-200", icon: IconStethoscope },
-  police:  { color: "text-blue-600", bgColor: "bg-blue-50", borderColor: "border-blue-200", icon: IconShield },
-  crime:   { color: "text-blue-600", bgColor: "bg-blue-50", borderColor: "border-blue-200", icon: IconShield },
-};
-
-function CategoryBadge({ category }: { category: string }) {
-  const key = category?.toLowerCase() ?? "";
-  const cfg = CATEGORY_CONFIG[key] || { 
-    color: "text-gray-500", 
-    bgColor: "bg-gray-50", 
-    borderColor: "border-gray-200", 
-    icon: IconCircleDashed
-  };
-  
-  const Icon = cfg.icon;
-  
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold capitalize border ${cfg.bgColor} ${cfg.color} ${cfg.borderColor}`}>
-      <Icon size={14} stroke={1.5} />
-      {category ?? "None"}
-    </span>
-  );
-}
+// ── Forward away badge ────────────────────────────────────────────────────────
 
 function ForwardAwayBadge({ status }: { status?: string | null }) {
   const { label, variant } = formatForwardAwayBadge(status);
   const isAuto = variant === "auto";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
         isAuto
-          ? "border-violet-200 bg-violet-50 text-violet-700"
-          : "border-indigo-200 bg-indigo-50 text-indigo-700"
-      }`}
+          ? "border-info/30 bg-info-muted text-info"
+          : "border-primary/30 bg-primary/10 text-primary"
+      )}
     >
-      <IconHistory size={14} stroke={1.5} />
+      <History className="h-3.5 w-3.5" strokeWidth={1.75} />
       {label}
     </span>
   );
@@ -465,7 +355,7 @@ function latLng(incident: Incident): [number, number] | null {
 
 // ── Stat Cards ────────────────────────────────────────────────────────────────
 
-function StatCards({ incidents, unreadCount }: { incidents: Incident[]; unreadCount: number }) {
+function IncidentStatGrid({ incidents, unreadCount }: { incidents: Incident[]; unreadCount: number }) {
   const total = incidents.length;
   const active = incidents.filter(i => {
     const s = normalizeIncidentStatus(i.status);
@@ -476,56 +366,12 @@ function StatCards({ incidents, unreadCount }: { incidents: Incident[]; unreadCo
     return s === "resolved" || s === "served" || s === "false_alarm";
   }).length;
 
-  const stats = [
-    {
-      label: "Total",
-      value: total,
-      icon: IconChartBar,
-      bgColor: "bg-blue-50",
-      iconColor: "text-blue-600",
-      borderColor: "border-blue-200",
-    },
-    {
-      label: "Unread",
-      value: unreadCount,
-      icon: IconMail,
-      bgColor: "bg-indigo-50",
-      iconColor: "text-indigo-600",
-      borderColor: "border-indigo-200",
-    },
-    {
-      label: "Active",
-      value: active,
-      icon: IconProgress,
-      bgColor: "bg-yellow-50",
-      iconColor: "text-yellow-700",
-      borderColor: "border-yellow-200",
-    },
-    {
-      label: "Closed",
-      value: closed,
-      icon: IconCircleCheck,
-      bgColor: "bg-green-50",
-      iconColor: "text-green-600",
-      borderColor: "border-green-200",
-    },
-  ];
-
   return (
     <div className="mb-6 grid grid-cols-4 gap-4">
-      {stats.map(({ label, value, icon: Icon, bgColor, iconColor, borderColor }) => (
-        <Card key={label} className={`border ${borderColor} shadow-sm hover:shadow-md transition-shadow`}>
-          <CardContent className="flex items-center gap-4 p-5">
-            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${bgColor}`}>
-              <Icon size={24} stroke={1.5} className={iconColor} />
-            </div>
-            <div>
-              <p className="font-mono text-3xl font-bold leading-none">{value}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{label}</p>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+      <StatCard label="Total" value={total} icon={BarChart3} variant="info" />
+      <StatCard label="Unread" value={unreadCount} icon={Mail} variant="primary" />
+      <StatCard label="Active" value={active} icon={Loader} variant="warning" />
+      <StatCard label="Closed" value={closed} icon={CircleCheck} variant="success" />
     </div>
   );
 }
@@ -533,10 +379,11 @@ function StatCards({ incidents, unreadCount }: { incidents: Incident[]; unreadCo
 // ── Page Skeleton ─────────────────────────────────────────────────────────────
 
 function PageSkeleton() {
+  const headerWidths = ["w-24", "w-30", "w-50", "w-28", "w-28"];
+  const rowWidths = ["w-[120px]", "w-[160px]", "w-[200px]"];
+
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar role="operator" />
-      <main className="flex-1 overflow-y-auto bg-background p-6">
+    <AppShell role="operator">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 animate-pulse rounded-lg bg-muted" />
@@ -547,7 +394,7 @@ function PageSkeleton() {
           </div>
           <div className="h-9 w-36 animate-pulse rounded-lg bg-muted" />
         </div>
-        <div className="mb-6 grid grid-cols-4 gap-3">
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[0,1,2,3].map(i => (
             <Card key={i} className="border-0 shadow-sm">
               <CardContent className="flex items-center gap-3 p-4">
@@ -573,20 +420,20 @@ function PageSkeleton() {
           <CardContent className="p-0">
             <table className="w-full">
               <thead>
-                <tr className="border-b" style={{ borderColor: "var(--border)" }}>
-                  {[96,120,200,112,112].map((w, i) => (
+                <tr className="border-b border-border">
+                  {headerWidths.map((width, i) => (
                     <th key={i} className="px-4 py-3 text-left">
-                      <div className="h-3 animate-pulse rounded bg-muted" style={{ width: w }} />
+                      <div className={cn("h-3 animate-pulse rounded bg-muted", width)} />
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {Array.from({ length: 7 }).map((_, row) => (
-                  <tr key={row} className="border-b" style={{ borderColor: "var(--border)" }}>
+                  <tr key={row} className="border-b border-border">
                     <td className="px-4 py-3.5"><div className="h-5 w-16 animate-pulse rounded-full bg-muted" /></td>
                     <td className="px-4 py-3.5"><div className="h-4 w-28 animate-pulse rounded bg-muted" /></td>
-                    <td className="px-4 py-3.5"><div className="h-4 animate-pulse rounded bg-muted" style={{ width: `${120 + (row%3)*40}px` }} /></td>
+                    <td className="px-4 py-3.5"><div className={cn("h-4 animate-pulse rounded bg-muted", rowWidths[row % rowWidths.length])} /></td>
                     <td className="px-4 py-3.5"><div className="h-5 w-20 animate-pulse rounded-full bg-muted" /></td>
                     <td className="px-4 py-3.5"><div className="h-4 w-24 animate-pulse rounded bg-muted" /></td>
                   </tr>
@@ -595,8 +442,7 @@ function PageSkeleton() {
             </table>
           </CardContent>
         </Card>
-      </main>
-    </div>
+    </AppShell>
   );
 }
 
@@ -604,54 +450,53 @@ function PageSkeleton() {
 
 function ErrorBanner({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="flex items-center gap-4 rounded-xl border p-5" style={{
-      borderColor: "#ef444433", backgroundColor: "#ef444408",
-    }}>
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-        style={{ backgroundColor: "#ef444415", color: "#ef4444" }}>
-        <IconAlertHexagon size={20} stroke={1.5} />
+    <div className="flex items-center gap-4 rounded-xl border border-destructive/25 bg-destructive/5 p-5">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-destructive/10">
+        <AlertOctagon className="h-5 w-5 text-destructive" strokeWidth={1.75} />
       </div>
       <div className="flex-1">
-        <p className="font-semibold" style={{ color: "#ef4444" }}>Failed to load incidents</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">Could not reach the server. Check your connection and try again.</p>
+        <p className="font-semibold text-destructive">Failed to load incidents</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Could not reach the server. Check your connection and try again.
+        </p>
       </div>
       <Button variant="outline" size="sm" onClick={onRetry} className="shrink-0 gap-1.5">
-        <IconRefresh size={16} stroke={1.5} />
+        <RefreshCw className="h-4 w-4" strokeWidth={1.75} />
         Retry
       </Button>
     </div>
   );
 }
 
-function EmptyState({ isFiltered, queueTab }: { isFiltered: boolean; queueTab?: QueueTab }) {
+function IncidentListEmpty({ isFiltered, queueTab }: { isFiltered: boolean; queueTab?: QueueTab }) {
   const isForwardedAway = queueTab === "forwarded_away";
+
+  if (isFiltered) {
+    return (
+      <EmptyState
+        icon={SlidersHorizontal}
+        title="No matching incidents"
+        description="Try adjusting or clearing your filters"
+      />
+    );
+  }
+
+  if (isForwardedAway) {
+    return (
+      <EmptyState
+        icon={History}
+        title="No forwarded incidents"
+        description="Incidents you forward away will appear here for audit"
+      />
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl"
-        style={{
-          backgroundColor: isFiltered || isForwardedAway ? "var(--muted)" : "rgb(220 252 231)",
-        }}>
-        {isFiltered
-          ? <IconAdjustmentsHorizontal size={36} stroke={1.5} className="text-muted-foreground" />
-          : isForwardedAway
-            ? <IconHistory size={36} stroke={1.5} className="text-muted-foreground" />
-            : <IconCircleCheck size={36} stroke={1.5} className="text-green-600" />}
-      </div>
-      <p className="text-xl font-bold mb-2">
-        {isFiltered
-          ? "No matching incidents"
-          : isForwardedAway
-            ? "No forwarded incidents"
-            : "All clear"}
-      </p>
-      <p className="text-sm text-muted-foreground max-w-md">
-        {isFiltered
-          ? "Try adjusting or clearing your filters"
-          : isForwardedAway
-            ? "Incidents you forward away will appear here for audit"
-            : "No incidents assigned to your station"}
-      </p>
-    </div>
+    <EmptyState
+      icon={CircleCheck}
+      title="All clear"
+      description="No incidents assigned to your station"
+    />
   );
 }
 
@@ -662,12 +507,11 @@ function DetailField({ icon: Icon, label, children }: {
 }) {
   return (
     <div className="flex gap-3">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-        style={{ backgroundColor: "color-mix(in oklch, var(--primary) 10%, transparent)", color: "var(--primary)" }}>
-        <Icon size={16} stroke={1.5} />
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Icon className="h-4 w-4" strokeWidth={1.75} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
+        <p className="text-label mb-1">{label}</p>
         <div className="text-sm">{children}</div>
       </div>
     </div>
@@ -692,12 +536,8 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
 
   const { success, error: toastError } = useToast();
 
-  const cfg = CATEGORY_CONFIG[data.category?.toLowerCase()] ?? {
-    color: "var(--primary)",
-    bgColor: "",
-    borderColor: "",
-    icon: IconAlertHexagon,
-  };
+  const cfg = categoryStyle(data.category);
+  const CategoryIcon = cfg.icon;
   const coords = latLng(data);
   const showFalseAlarm = !isAuditView && canMarkFalseAlarm(data.status);
   const autoOnly = isAutoOnlyStatus(data.status);
@@ -725,46 +565,48 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
     <div className="flex h-full flex-col overflow-hidden">
 
       {/* Panel header */}
-      <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+      <div className="shrink-0 flex items-center justify-between border-b border-border px-5 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl text-base"
-            style={{ backgroundColor: `${cfg.color}18`, border: `1px solid ${cfg.color}33` }}>
-            <cfg.icon size={16} stroke={1.5} style={{ color: cfg.color }} />
+          <div
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-xl border",
+              cfg.bg,
+              cfg.border
+            )}
+          >
+            <CategoryIcon className={cn("h-4 w-4", cfg.text)} strokeWidth={1.75} />
           </div>
           <div>
-            <p className="text-[10px] font-mono text-muted-foreground">#{String(data.id).slice(0, 8).toUpperCase()}</p>
+            <p className="text-data text-muted-foreground">#{String(data.id).slice(0, 8).toUpperCase()}</p>
             <p className="text-sm font-bold capitalize">{data.category ?? "Unknown"} Incident</p>
           </div>
         </div>
         <button onClick={onClose}
           className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-          <IconX size={16} stroke={1.5} />
+          <X className="h-4 w-4" strokeWidth={1.75} />
         </button>
       </div>
 
       {/* Status strip */}
-      <div className="shrink-0 flex items-center gap-2.5 px-5 py-2.5 border-b"
-        style={{ borderColor: "var(--border)", backgroundColor: "var(--muted)" }}>
+      <div className="shrink-0 flex items-center gap-2.5 border-b border-border bg-muted px-5 py-2.5">
         {isAuditView ? (
           <ForwardAwayBadge status={data.operator_display_status} />
         ) : (
           <StatusBadge status={data.status} />
         )}
         {!isAuditView && normalizeIncidentStatus(data.status) === "routed" && (
-          <span className="text-xs text-red-500 font-medium">Requires immediate attention</span>
+          <span className="text-xs font-medium text-status-routed">Requires immediate attention</span>
         )}
       </div>
 
       {isAuditView && data.operator_display_message && (
-        <div className="shrink-0 border-b bg-indigo-50/60 px-5 py-3 text-sm text-indigo-900"
-          style={{ borderColor: "var(--border)" }}>
+        <div className="shrink-0 border-b border-border bg-info-muted px-5 py-3 text-sm text-info">
           {data.operator_display_message}
         </div>
       )}
 
       {isAuditView && data.forward_away_info?.current_assigned_station_name && (
-        <div className="shrink-0 border-b px-5 py-2.5 text-xs text-muted-foreground"
-          style={{ borderColor: "var(--border)" }}>
+        <div className="shrink-0 border-b border-border px-5 py-2.5 text-xs text-muted-foreground">
           Currently at{" "}
           <span className="font-semibold text-foreground">
             {data.forward_away_info.current_assigned_station_name}
@@ -776,15 +618,15 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
       <div className="flex-1 min-h-0 overflow-y-auto">
         {loadingDetail ? (
           <div className="space-y-4 p-5">
-            {[0.75, 0.5, 1, 0.6].map((w, i) => (
-              <div key={i} className="h-4 animate-pulse rounded bg-muted" style={{ width: `${w * 100}%` }} />
+            {["w-3/4", "w-1/2", "w-full", "w-3/5"].map((width, i) => (
+              <div key={i} className={cn("h-4 animate-pulse rounded bg-muted", width)} />
             ))}
           </div>
         ) : (
-          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+          <div className="divide-y border-border">
 
             <div className="px-5 py-4">
-              <DetailField icon={IconTag} label="Emergency Category">
+              <DetailField icon={Tag} label="Emergency Category">
                 <div className="flex items-center gap-2 flex-wrap">
                   <CategoryBadge category={data.category} />
                   {data.confidence != null && (
@@ -797,13 +639,13 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
             </div>
 
             <div className="px-5 py-4">
-              <DetailField icon={IconClockHour4} label="Time Reported">
+              <DetailField icon={Clock} label="Time Reported">
                 <span className="font-mono text-sm">{formatTimeFull(data.created_at)}</span>
               </DetailField>
             </div>
 
             <div className="px-5 py-4">
-              <DetailField icon={IconUser} label="Reported By">
+              <DetailField icon={User} label="Reported By">
                 <p className="font-semibold">{data.reporter?.full_name ?? "Unknown"}</p>
                 {data.reporter?.phone && (
                   <p className="mt-0.5 text-xs text-muted-foreground">{data.reporter.phone}</p>
@@ -812,28 +654,30 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
             </div>
 
             <div className="px-5 py-4">
-              <DetailField icon={IconMapPin} label="Location">
+              <DetailField icon={MapPin} label="Location">
                 {coords ? (
                   <div className="space-y-2">
                     <p className="font-mono text-xs text-muted-foreground">
                       {coords[0].toFixed(6)}, {coords[1].toFixed(6)}
                     </p>
                     {data.address_line && <p className="text-sm">{data.address_line}</p>}
-                    <button onClick={() => setShowMap(v => !v)}
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-all"
-                      style={{
-                        backgroundColor: showMap ? `${cfg.color}12` : "var(--muted)",
-                        color: showMap ? cfg.color : "var(--muted-foreground)",
-                        border: `1px solid ${showMap ? `${cfg.color}30` : "var(--border)"}`,
-                      }}>
+                    <button
+                      onClick={() => setShowMap(v => !v)}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-all",
+                        showMap
+                          ? "border-primary/20 bg-primary/10 text-primary"
+                          : "border-border bg-muted text-muted-foreground"
+                      )}
+                    >
                       <span className="flex items-center gap-1.5">
-                        <IconMapPin size={14} stroke={1.5} />
+                        <MapPin className="h-3.5 w-3.5" strokeWidth={1.75} />
                         {showMap ? "Hide map" : "View on map"}
                       </span>
-                      <IconChevronRight size={14} stroke={1.5} className={`transition-transform duration-200 ${showMap ? "rotate-90" : ""}`} />
+                      <ChevronRight className={cn("h-3.5 w-3.5 transition-transform duration-200", showMap && "rotate-90")} strokeWidth={1.75} />
                     </button>
                     {showMap && (
-                      <div className="overflow-hidden rounded-xl border" style={{ height: 220, borderColor: "var(--border)" }}>
+                      <div className="overflow-hidden rounded-xl border border-border" style={{ height: 220 }}>
                         <InlineMap lat={coords[0]} lng={coords[1]} />
                       </div>
                     )}
@@ -856,7 +700,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
 
             {showTracking && coords && (
               <div className="px-5 py-4">
-                <DetailField icon={IconNavigation} label="Live unit tracking">
+                <DetailField icon={Navigation} label="Live unit tracking">
                   <UnitTrackingMap
                     incidentId={data.id}
                     incidentLat={coords[0]}
@@ -870,38 +714,36 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
 
             {data.assigned_station && (
               <div className="px-5 py-4">
-                <DetailField icon={IconBuildingHospital} label="Assigned Station">
+                <DetailField icon={Hospital} label="Assigned Station">
                   <p className="font-semibold">{data.assigned_station.name}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground capitalize">
                     {data.assigned_station.type_display ?? data.assigned_station.type} · {data.assigned_station.city}
                   </p>
                   {data.distance_to_station_km != null && (
                     <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      <IconNavigation size={14} stroke={1.5} />
+                      <Navigation className="h-3.5 w-3.5" strokeWidth={1.75} />
                       {data.distance_to_station_km.toFixed(1)} km away
                     </span>
                   )}
                   {coords && data.assigned_station.latitude && data.assigned_station.longitude && (
                     <div className="mt-3 space-y-2">
-                      <div className="rounded-lg border px-3 py-2 text-xs"
-                        style={{ backgroundColor: "var(--muted)", borderColor: "var(--border)" }}>
+                      <div className="rounded-lg border border-border bg-muted px-3 py-2 text-xs">
                         <p className="font-semibold mb-1 text-muted-foreground">Incident Location:</p>
                         <p className="font-mono">{coords[0].toFixed(6)}, {coords[1].toFixed(6)}</p>
                       </div>
                       <a
                         href={`https://www.google.com/maps/dir/${Number(data.assigned_station.latitude).toFixed(6)},${Number(data.assigned_station.longitude).toFixed(6)}/${coords[0].toFixed(6)},${coords[1].toFixed(6)}`}
                         target="_blank" rel="noopener noreferrer"
-                        className="flex items-center justify-between rounded-xl px-4 py-3 text-sm font-semibold transition-all hover:shadow-md"
-                        style={{ backgroundColor: cfg.color, color: "white" }}
+                        className="flex items-center justify-between rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-md"
                       >
                         <div className="flex items-center gap-2">
-                          <IconNavigation size={16} stroke={1.5} />
+                          <Navigation className="h-4 w-4" strokeWidth={1.75} />
                           <div className="text-left">
                             <div>Get Directions to Incident</div>
                             <div className="text-xs font-normal opacity-90">From {data.assigned_station.name}</div>
                           </div>
                         </div>
-                        <IconChevronRight size={16} stroke={1.5} />
+                        <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
                       </a>
                       <button
                         onClick={() => {
@@ -909,13 +751,9 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
                           navigator.clipboard.writeText(url);
                           success("Copied", "Directions link copied to clipboard");
                         }}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted"
-                        style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
                       >
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
+                        <Copy className="h-3.5 w-3.5" strokeWidth={1.75} />
                         Copy Directions Link
                       </button>
                     </div>
@@ -926,7 +764,7 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
 
             {data.audio_url && (
               <div className="px-5 py-4">
-                <DetailField icon={IconVolume} label="Audio Recording">
+                <DetailField icon={Volume2} label="Audio Recording">
                   <AudioPlayer url={data.audio_url} />
                 </DetailField>
               </div>
@@ -939,20 +777,18 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
             )}
 
             <div className="px-5 py-4">
-              <DetailField icon={IconFileText} label="Transcription">
+              <DetailField icon={FileText} label="Transcription">
                 {data.amharic_text || data.english_text ? (
                   <div className="mt-1 space-y-2">
                     {data.amharic_text && (
-                      <div className="rounded-xl p-3 text-sm leading-relaxed"
-                        style={{ backgroundColor: "var(--muted)", color: "var(--muted-foreground)" }}>
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider opacity-60">Amharic</p>
+                      <div className="rounded-xl bg-muted p-3 text-sm leading-relaxed text-muted-foreground">
+                        <p className="text-label mb-1 opacity-60">Amharic</p>
                         {data.amharic_text}
                       </div>
                     )}
                     {data.english_text && (
-                      <div className="rounded-xl border p-3 text-sm leading-relaxed"
-                        style={{ borderColor: "var(--border)" }}>
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">English</p>
+                      <div className="rounded-xl border border-border p-3 text-sm leading-relaxed">
+                        <p className="text-label mb-1">English</p>
                         <span dangerouslySetInnerHTML={{ __html: data.english_text }} />
                       </div>
                     )}
@@ -969,33 +805,29 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
 
       {/* Footer actions */}
       {!loadingDetail && (
-        <div className="shrink-0 space-y-2 border-t p-4" style={{ borderColor: "var(--border)" }}>
+        <div className="shrink-0 space-y-2 border-t border-border p-4">
           {isAuditView ? (
-            <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
-              style={{ backgroundColor: "var(--muted)" }}>
-              <IconHistory size={16} stroke={1.5} />
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-muted px-3 py-2.5 text-xs font-medium text-muted-foreground">
+              <History className="h-4 w-4" strokeWidth={1.75} />
               Read-only audit view — no actions available
             </div>
           ) : (
             <>
           {autoOnly && !showForward && (
-            <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
-              style={{ backgroundColor: "var(--muted)" }}>
-              <IconRadar size={16} stroke={1.5} />
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-muted px-3 py-2.5 text-xs font-medium text-muted-foreground">
+              <Radar className="h-4 w-4" strokeWidth={1.75} />
               {workflowHint ?? "System is processing this incident."}
             </div>
           )}
           {terminal && (
-            <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium"
-              style={{ backgroundColor: "color-mix(in oklch, var(--chart-2) 10%, transparent)", color: "var(--chart-2)" }}>
-              <IconCircleCheck size={16} stroke={1.5} />
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-info-muted px-3 py-2.5 text-xs font-medium text-info">
+              <CircleCheck className="h-4 w-4" strokeWidth={1.75} />
               No further actions
             </div>
           )}
           {awaitingClosure && !terminal && (
-            <div className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
-              style={{ backgroundColor: "var(--muted)" }}>
-              <IconClockHour4 size={16} stroke={1.5} />
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-muted px-3 py-2.5 text-xs font-medium text-muted-foreground">
+              <Clock className="h-4 w-4" strokeWidth={1.75} />
               {workflowHint ?? "Awaiting citizen feedback or unit closure."}
             </div>
           )}
@@ -1003,15 +835,14 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
             <>
               {workflowHint && (
                 <div
-                  className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
-                  style={{ backgroundColor: "var(--muted)" }}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-muted px-3 py-2.5 text-xs font-medium text-muted-foreground"
                 >
                   {needsUnitAssignment(data) ? (
-                    <IconUser size={16} stroke={1.5} />
+                    <User className="h-4 w-4" strokeWidth={1.75} />
                   ) : isFieldProgressByUnit(data) ? (
-                    <IconActivity size={16} stroke={1.5} />
+                    <Activity className="h-4 w-4" strokeWidth={1.75} />
                   ) : (
-                    <IconRadar size={16} stroke={1.5} />
+                    <Radar className="h-4 w-4" strokeWidth={1.75} />
                   )}
                   {workflowHint}
                 </div>
@@ -1030,10 +861,9 @@ function IncidentDetailPanel({ incident, detail, loadingDetail, perspective, onC
           )}
           {autoOnly && showForward && workflowHint && (
             <div
-              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground"
-              style={{ backgroundColor: "var(--muted)" }}
+              className="flex items-center justify-center gap-2 rounded-xl bg-muted px-3 py-2.5 text-xs font-medium text-muted-foreground"
             >
-              <IconRadar size={16} stroke={1.5} />
+              <Radar className="h-4 w-4" strokeWidth={1.75} />
               {workflowHint}
             </div>
           )}
@@ -1247,81 +1077,93 @@ function IncidentsPageInner() {
 
   if (fetchError) {
     return (
-      <div className="flex h-screen overflow-hidden">
-        <Sidebar role="operator" />
-        <main className="flex-1 overflow-y-auto bg-background p-6">
-          <div className="mb-6 flex items-center gap-3">
-            <IconAlertHexagon size={28} stroke={1.5} className="text-primary" />
-            <h1 className="text-2xl font-bold">Incidents</h1>
-          </div>
-          <ErrorBanner onRetry={refresh} />
-        </main>
-      </div>
+      <AppShell role="operator">
+        <PageHeader icon={AlertOctagon} title="Incidents" />
+        <ErrorBanner onRetry={refresh} />
+      </AppShell>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar role="operator" />
-      <main className="flex-1 overflow-y-auto bg-background p-6">
-
-        {/* Page header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 border border-red-200">
-              <IconAlertHexagon size={24} stroke={1.5} className="text-red-600 animate-pulse" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Incidents</h1>
-              <div className="flex items-center gap-3 mt-1">
-                <p className="text-sm text-muted-foreground font-mono">
-                  {incidents.length} total
-                  {unreadCount > 0 && (
-                    <span className="ml-2 font-semibold text-indigo-600">
-                      · {unreadCount} unread
-                    </span>
-                  )}
-                </p>
-                <span className="flex items-center gap-1.5">
-                  <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-600 animate-pulse' : 'bg-amber-600'}`} />
-                  <IconRadar size={14} stroke={1.5} className={isConnected ? 'text-green-600' : 'text-amber-600'} />
-                  <span className={`text-xs font-medium ${isConnected ? 'text-green-600' : 'text-amber-600'}`}>
-                    {isConnected ? 'Live' : 'Offline'}
-                  </span>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-2 rounded-lg">
-              <IconRefresh size={16} stroke={1.5} />
-              Refresh
-            </Button>
-            <div className="flex items-center rounded-lg border bg-muted/50 p-1">
-              {(["list", "map"] as const).map(v => (
-                <button key={v} onClick={() => setView(v)}
-                  className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all ${
-                    view === v 
-                      ? 'bg-background text-foreground shadow-sm' 
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}>
-                  {v === "list" ? <IconLayoutList size={16} stroke={1.5} /> : <IconMap2 size={16} stroke={1.5} />}
-                  {v.charAt(0).toUpperCase() + v.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+    <AppShell role="operator">
 
         {queueTab === "active" && (
-          <StatCards incidents={incidents} unreadCount={unreadCount} />
+          <IncidentStatGrid incidents={incidents} unreadCount={unreadCount} />
         )}
+
+        <PageHeader
+          icon={AlertOctagon}
+          title="Incidents"
+          subtitle={
+            <>
+              <span className="font-mono">
+                {incidents.length} total
+                {unreadCount > 0 && (
+                  <span className="ml-2 font-semibold text-info">
+                    · {unreadCount} unread
+                  </span>
+                )}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full",
+                    isConnected ? "animate-pulse bg-success" : "bg-warning"
+                  )}
+                />
+                <Radar
+                  className={cn("h-3.5 w-3.5", isConnected ? "text-success" : "text-warning")}
+                  strokeWidth={1.75}
+                />
+                <span
+                  className={cn(
+                    "text-xs font-medium",
+                    isConnected ? "text-success" : "text-warning"
+                  )}
+                >
+                  {isConnected ? "Live" : "Offline"}
+                </span>
+              </span>
+            </>
+          }
+          actions={
+            <>
+              <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-2 rounded-lg">
+                <RefreshCw className="h-4 w-4" strokeWidth={1.75} />
+                Refresh
+              </Button>
+              <div className="flex items-center rounded-lg border bg-muted/50 p-1">
+                {(["list", "map"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all",
+                      view === v
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {v === "list" ? (
+                      <LayoutList className="h-4 w-4" strokeWidth={1.75} />
+                    ) : (
+                      <Map className="h-4 w-4" strokeWidth={1.75} />
+                    )}
+                    {v.charAt(0).toUpperCase() + v.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </>
+          }
+          className="mb-0"
+        />
 
         {/* Map view — active queue only */}
         {view === "map" && queueTab === "active" && (
-          <div className="overflow-hidden rounded-2xl border shadow-sm"
-            style={{ height: "calc(100vh - 260px)", borderColor: "var(--border)" }}>
+          <div
+            className="overflow-hidden rounded-2xl border border-border shadow-sm"
+            style={{ height: "calc(100vh - 260px)" }}
+          >
             <IncidentMap incidents={filtered} onSelect={openDetail} selectedId={selected?.id} />
           </div>
         )}
@@ -1358,7 +1200,7 @@ function IncidentsPageInner() {
                       }`}
                     >
                       {tab.label}
-                      <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px]">
+                      <span className="text-data rounded-full bg-muted px-2 py-0.5">
                         {tab.count}
                       </span>
                     </button>
@@ -1373,46 +1215,46 @@ function IncidentsPageInner() {
               )}
 
               {/* Filter bar */}
-              <Card className="mb-4 border shadow-sm rounded-xl">
-                <CardContent className="flex flex-wrap items-center gap-3 p-4">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                    <IconAdjustmentsHorizontal size={16} stroke={1.5} className="text-muted-foreground" />
-                  </div>
-                  <Select value={categoryFilter} onValueChange={v => setCategoryFilter(v as FilterCategory)}>
-                    <SelectTrigger className="h-9 w-44 rounded-lg">
-                      <SelectValue placeholder="All Categories" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INCIDENT_CATEGORIES.map(c => (
-                        <SelectItem key={c} value={c}>
-                          {c === "all" ? "All Categories" : c.charAt(0).toUpperCase() + c.slice(1)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={statusFilter} onValueChange={v => setStatusFilter(v as FilterStatus)}>
-                    <SelectTrigger className="h-9 w-44 rounded-lg">
-                      <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INCIDENT_STATUSES.map(s => (
-                        <SelectItem key={s} value={s}>
-                          {statusFilterLabel(s)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {isFiltered && (
-                    <button onClick={() => { setCategoryFilter("all"); setStatusFilter("all"); }}
-                      className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                      Clear filters
-                    </button>
-                  )}
-                  <span className="ml-auto text-sm font-mono text-muted-foreground">
+              <FilterBar
+                trailing={
+                  <span className="text-sm font-mono text-muted-foreground">
                     {filtered.length} result{filtered.length !== 1 ? "s" : ""}
                   </span>
-                </CardContent>
-              </Card>
+                }
+              >
+                <Select value={categoryFilter} onValueChange={v => setCategoryFilter(v as FilterCategory)}>
+                  <SelectTrigger className="h-9 w-44 rounded-lg">
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INCIDENT_CATEGORIES.map(c => (
+                      <SelectItem key={c} value={c}>
+                        {c === "all" ? "All Categories" : c.charAt(0).toUpperCase() + c.slice(1)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={statusFilter} onValueChange={v => setStatusFilter(v as FilterStatus)}>
+                  <SelectTrigger className="h-9 w-44 rounded-lg">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INCIDENT_STATUSES.map(s => (
+                      <SelectItem key={s} value={s}>
+                        {statusFilterLabel(s)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isFiltered && (
+                  <button
+                    onClick={() => { setCategoryFilter("all"); setStatusFilter("all"); }}
+                    className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </FilterBar>
 
               {/* Incident table */}
               <Card className="border shadow-sm rounded-xl overflow-hidden">
@@ -1422,10 +1264,10 @@ function IncidentsPageInner() {
                 <CardContent className="p-0">
                   {loadingForwardedAway && queueTab === "forwarded_away" ? (
                     <div className="flex items-center justify-center py-20 text-muted-foreground">
-                      <IconLoader2 size={24} stroke={1.5} className="animate-spin" />
+                      <Loader2 className="h-6 w-6 animate-spin" strokeWidth={1.75} />
                     </div>
                   ) : filtered.length === 0 ? (
-                    <EmptyState isFiltered={isFiltered} queueTab={queueTab} />
+                    <IncidentListEmpty isFiltered={isFiltered} queueTab={queueTab} />
                   ) : (
                     <Table>
                       <TableHeader>
@@ -1435,6 +1277,11 @@ function IncidentsPageInner() {
                           <TableHead className="text-xs font-bold uppercase tracking-wider">
                             {queueTab === "forwarded_away" ? "Destination" : "Station"}
                           </TableHead>
+                          {queueTab === "forwarded_away" && (
+                            <TableHead className="w-[22rem] text-xs font-bold uppercase tracking-wider">
+                              Reason
+                            </TableHead>
+                          )}
                           {queueTab === "active" && (
                             <TableHead className="text-xs font-bold uppercase tracking-wider">Unit</TableHead>
                           )}
@@ -1451,37 +1298,34 @@ function IncidentsPageInner() {
                           const isRouted = !isForwardedAwayTab && normalizeIncidentStatus(incident.status) === "routed";
                           const unread = !isForwardedAwayTab && isUnread(incident);
                           const isSelected = selected?.id === incident.id;
-                          const awaySubtitle =
-                            incident.operator_display_message ??
+                          const awayChain = incident.forward_away_info?.forward_chain;
+                          const awayDestination =
                             incident.forward_away_info?.to_station_name ??
                             incident.forward_away_info?.current_assigned_station_name;
+                          const awayReason =
+                            incident.operator_display_message ??
+                            awayChain?.find((step) => step.is_current)?.reason ??
+                            awayChain?.[awayChain.length - 1]?.reason;
                           return (
                             <TableRow
                               key={incident.id}
                               onClick={() => openDetail(incident, queueTab)}
-                              className={`cursor-pointer transition-all hover:bg-muted/50 ${
+                              className={`cursor-pointer border-l-4 transition-all hover:bg-muted/50 ${
                                 isSelected
                                   ? "bg-muted"
                                   : isForwardedAwayTab
                                     ? "opacity-90"
                                     : isRouted
-                                      ? "bg-red-50/30"
+                                      ? "border-status-routed bg-status-routed-muted/40"
                                       : unread
-                                        ? "bg-indigo-50/40"
-                                        : ""
-                              } ${unread ? "font-semibold" : ""}`}
-                              style={{
-                                borderLeft: isRouted
-                                  ? "4px solid rgb(220, 38, 38)"
-                                  : unread
-                                    ? "4px solid rgb(79, 70, 229)"
-                                    : "4px solid transparent",
-                              }}>
+                                        ? "border-info bg-info-muted/50"
+                                        : "border-transparent"
+                              } ${unread ? "font-semibold" : ""}`}>
                               <TableCell className="py-4 pl-4">
                                 <div className="flex items-center gap-2">
-                                  {isRouted && <span className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />}
+                                  {isRouted && <span className="h-2 w-2 animate-pulse rounded-full bg-status-routed" />}
                                   {unread && !isRouted && (
-                                    <span className="h-2 w-2 rounded-full bg-indigo-600" title="Unread" />
+                                    <span className="h-2 w-2 rounded-full bg-info" title="Unread" />
                                   )}
                                   <CategoryBadge category={incident.category} />
                                 </div>
@@ -1495,12 +1339,21 @@ function IncidentsPageInner() {
                               <TableCell className="py-4 text-sm text-muted-foreground">
                                 {isForwardedAwayTab ? (
                                   <div>
-                                    <p>{awaySubtitle ?? "—"}</p>
+                                    <p>{awayDestination ?? "—"}</p>
                                   </div>
                                 ) : (
                                   incident.assigned_station?.name ?? "—"
                                 )}
                               </TableCell>
+                              {queueTab === "forwarded_away" && (
+                                <TableCell className="w-[22rem] py-4 text-sm text-muted-foreground">
+                                  <div className="max-w-[22rem] overflow-hidden">
+                                    <p className="truncate whitespace-nowrap" title={awayReason ?? undefined}>
+                                      {awayReason ?? "—"}
+                                    </p>
+                                  </div>
+                                </TableCell>
+                              )}
                               {queueTab === "active" && (
                                 <TableCell className="py-4 text-sm text-muted-foreground">
                                   {incident.assigned_unit?.name ?? "—"}
@@ -1524,12 +1377,12 @@ function IncidentsPageInner() {
                                       title="Mark as read"
                                       disabled={markingReadId === incident.id}
                                       onClick={(e) => handleMarkRead(e, incident)}
-                                      className="flex h-8 w-8 items-center justify-center rounded-lg text-indigo-600 transition-colors hover:bg-indigo-50 disabled:opacity-50"
+                                      className="flex h-8 w-8 items-center justify-center rounded-lg text-info transition-colors hover:bg-info-muted disabled:opacity-50"
                                     >
                                       {markingReadId === incident.id ? (
-                                        <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                                        <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
                                       ) : (
-                                        <IconMail size={16} stroke={1.5} />
+                                        <Mail className="h-4 w-4" strokeWidth={1.75} />
                                       )}
                                     </button>
                                   )}
@@ -1548,8 +1401,7 @@ function IncidentsPageInner() {
             {/* Detail panel */}
             {selected && (
               <div className="col-span-5">
-                <Card className="border-0 shadow-sm rounded-xl overflow-hidden sticky top-0"
-                  style={{ maxHeight: "calc(100vh - 180px)" }}>
+                <Card className="sticky top-0 max-h-[calc(100vh-180px)] overflow-hidden rounded-xl border-0 shadow-sm">
                   <IncidentDetailPanel
                     incident={selected}
                     detail={detail}
@@ -1568,8 +1420,7 @@ function IncidentsPageInner() {
           </div>
         )}
 
-      </main>
-    </div>
+    </AppShell>
   );
 }
 

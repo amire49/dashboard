@@ -4,12 +4,13 @@ import { useEffect } from "react";
 import { ExternalLink, ClipboardList, ArrowRight, Shield } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import Sidebar from "@/components/layout/Sidebar";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import PageSection from "@/components/layout/PageSection";
 
 const KYC_SERVICE_URL = "https://kyc-micro-service.onrender.com/admin/dashboard/";
 
 export default function KycReviewPage() {
-  // Auto-redirect after 3 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
       window.open(KYC_SERVICE_URL, "_blank");
@@ -17,95 +18,70 @@ export default function KycReviewPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleOpenKYC = () => {
+  function handleOpenKYC() {
     window.open(KYC_SERVICE_URL, "_blank");
-  };
+  }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar role="admin" />
-      <main className="flex-1 overflow-y-auto bg-background p-6">
-        <div className="flex h-full items-center justify-center">
-          <Card className="w-full max-w-2xl border-0 shadow-lg">
-            <CardContent className="p-12">
-              <div className="text-center">
-                {/* Icon */}
-                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl"
-                  style={{ 
-                    background: "linear-gradient(135deg, var(--primary) 0%, color-mix(in oklch, var(--primary) 70%, transparent) 100%)",
-                  }}>
-                  <ClipboardList className="h-10 w-10 text-white" />
-                </div>
+    <AppShell role="admin">
+      <PageHeader
+        icon={ClipboardList}
+        title="KYC Review System"
+        subtitle="Hosted on a separate microservice for security and compliance"
+      />
 
-                {/* Title */}
-                <h1 className="mb-3 text-3xl font-bold">KYC Review System</h1>
-                <p className="mb-8 text-muted-foreground">
-                  The KYC review system is hosted on a separate microservice for security and compliance.
-                </p>
-
-                {/* Info box */}
-                <div className="mb-8 rounded-xl border p-6 text-left"
-                  style={{ 
-                    backgroundColor: "color-mix(in oklch, var(--primary) 5%, transparent)",
-                    borderColor: "color-mix(in oklch, var(--primary) 20%, transparent)",
-                  }}>
+      <div className="flex min-h-[calc(100vh-12rem)] items-center justify-center">
+        <Card className="w-full max-w-2xl rounded-xl border py-0 shadow-card">
+          <CardContent className="p-12">
+            <div className="text-center">
+              <PageSection className="mb-8">
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-6 text-left">
                   <div className="mb-3 flex items-center gap-2">
-                    <Shield className="h-5 w-5" style={{ color: "var(--primary)" }} />
-                    <h3 className="font-semibold">External Authentication Required</h3>
+                    <Shield className="h-5 w-5 text-primary" />
+                    <h3 className="text-section-title">External Authentication Required</h3>
                   </div>
-                  <ul className="space-y-2 text-sm text-muted-foreground">
+                  <ul className="space-y-2 text-caption">
                     <li className="flex items-start gap-2">
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: "var(--primary)" }} />
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                       <span>You will be redirected to the KYC microservice login page</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: "var(--primary)" }} />
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                       <span>Log in with your KYC admin credentials (separate from this dashboard)</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: "var(--primary)" }} />
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                       <span>Review and approve/reject citizen identity submissions</span>
                     </li>
                   </ul>
                 </div>
+              </PageSection>
 
-                {/* Action buttons */}
-                <div className="flex flex-col gap-3">
-                  <Button 
-                    onClick={handleOpenKYC}
-                    size="lg"
-                    className="w-full gap-2 text-base"
-                    style={{ backgroundColor: "var(--primary)" }}
-                  >
-                    <ExternalLink className="h-5 w-5" />
-                    Open KYC Review System
-                    <ArrowRight className="h-5 w-5 ml-auto" />
-                  </Button>
-                  
-                  <p className="text-xs text-muted-foreground">
-                    Auto-redirecting in 3 seconds...
-                  </p>
-                </div>
+              <div className="flex flex-col gap-3">
+                <Button onClick={handleOpenKYC} size="lg" className="w-full gap-2 text-base">
+                  <ExternalLink className="h-5 w-5" />
+                  Open KYC Review System
+                  <ArrowRight className="ml-auto h-5 w-5" />
+                </Button>
 
-                {/* URL display */}
-                <div className="mt-6 rounded-lg border px-4 py-3"
-                  style={{ backgroundColor: "var(--muted)", borderColor: "var(--border)" }}>
-                  <p className="text-xs font-medium text-muted-foreground mb-1">Service URL:</p>
-                  <a 
-                    href={KYC_SERVICE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-sm hover:underline"
-                    style={{ color: "var(--primary)" }}
-                  >
-                    {KYC_SERVICE_URL}
-                  </a>
-                </div>
+                <p className="text-caption">Auto-redirecting in 3 seconds...</p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-    </div>
+
+              <div className="mt-6 rounded-xl border border-border bg-muted px-4 py-3">
+                <p className="mb-1 text-label">Service URL</p>
+                <a
+                  href={KYC_SERVICE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-data text-sm text-primary hover:underline"
+                >
+                  {KYC_SERVICE_URL}
+                </a>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </AppShell>
   );
 }

@@ -1,26 +1,22 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import {
-  IconBuildingSkyscraper,
-  IconPlus,
-  IconTrash,
-  IconAdjustmentsHorizontal,
-  IconSearch,
-  IconShield,
-  IconStethoscope,
-  IconFlame,
-  IconCircleCheck,
-  IconCircleX,
-  IconUsers,
-  IconPhone,
-  IconMapPin,
-  IconX,
-  IconCheck,
-  IconMail,
-  IconEdit,
-  IconLoader2,
-} from "@tabler/icons-react";
+  Building2,
+  Plus,
+  Trash2,
+  SlidersHorizontal,
+  Search,
+  CheckCircle,
+  XCircle,
+  Users,
+  Phone,
+  MapPin,
+  X,
+  Check,
+  Pencil,
+  Loader2,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,10 +45,28 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Sidebar from "@/components/layout/Sidebar";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import FilterBar from "@/components/dashboard/FilterBar";
+import EmptyState from "@/components/dashboard/EmptyState";
+import CategoryBadge from "@/components/incidents/CategoryBadge";
 import { stationsAPI } from "@/lib/api";
+import { stationTypeStyle } from "@/lib/status-styles";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/lib/useToast";
 import type { Station, StationType } from "@/types";
+
+function StationTypeOption({ type }: { type: StationType }) {
+  const cfg = stationTypeStyle(type);
+  const Icon = cfg.icon;
+
+  return (
+    <span className="flex items-center gap-2">
+      <Icon className={cn("h-3.5 w-3.5", cfg.text)} strokeWidth={1.75} />
+      {cfg.label}
+    </span>
+  );
+}
 
 const emptyForm = {
   name: "",
@@ -238,35 +252,25 @@ export default function StationsPage() {
   });
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar role="admin" />
-
-      <main className="flex-1 overflow-y-auto bg-background p-6">
-        {/* Page Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50">
-                <IconBuildingSkyscraper size={28} stroke={1.5} className="text-red-600" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold tracking-tight">Stations</h1>
-                  <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-sm font-mono">
-                    {stations.length}
-                  </Badge>
-                </div>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  Showing {filteredStations.length} of {stations.length} stations
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {/* Filter Dropdown */}
+    <AppShell role="admin">
+        <PageHeader
+          icon={Building2}
+          title="Stations"
+          subtitle={
+            <>
+              <Badge variant="secondary" className="rounded-full font-mono">
+                {stations.length}
+              </Badge>
+              <span>
+                Showing {filteredStations.length} of {stations.length} stations
+              </span>
+            </>
+          }
+          actions={
+            <>
               <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "active" | "inactive")}>
                 <SelectTrigger className="w-40">
-                  <IconAdjustmentsHorizontal size={16} stroke={1.5} className="mr-2" />
+                  <SlidersHorizontal className="mr-2 h-4 w-4" strokeWidth={1.75} />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -275,22 +279,20 @@ export default function StationsPage() {
                   <SelectItem value="inactive">Inactive Only</SelectItem>
                 </SelectContent>
               </Select>
-
-              {/* Add Station Button */}
-              <Button onClick={() => setShowAddForm(!showAddForm)} className="gap-2 bg-red-600 hover:bg-red-700">
-                <IconPlus size={16} stroke={1.5} />
+              <Button onClick={() => setShowAddForm(!showAddForm)} className="gap-2">
+                <Plus className="h-4 w-4" strokeWidth={1.75} />
                 Add Station
               </Button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {/* Add Station Form - Slide Down */}
         {showAddForm && (
-          <Card className="mb-6 border-0 shadow-md">
+          <Card className="mb-6 rounded-xl border py-0 shadow-card">
             <CardContent className="p-6">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold">New Station</h2>
+                <h2 className="text-section-title">New Station</h2>
                 <button
                   onClick={() => {
                     setShowAddForm(false);
@@ -298,7 +300,7 @@ export default function StationsPage() {
                   }}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
-                  <IconX size={18} stroke={1.5} />
+                  <X className="h-[18px] w-[18px]" strokeWidth={1.75} />
                 </button>
               </div>
 
@@ -306,7 +308,7 @@ export default function StationsPage() {
                 {/* Row 1: Name (full width) */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="col-span-3 space-y-1.5">
-                    <Label htmlFor="name" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label htmlFor="name" className="text-label">
                       Station Name
                     </Label>
                     <Input
@@ -322,7 +324,7 @@ export default function StationsPage() {
                 {/* Row 2: Type, City, Phone */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="type" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label htmlFor="type" className="text-label">
                       Type
                     </Label>
                     <Select value={form.type} onValueChange={(v) => updateField("type", v)}>
@@ -331,29 +333,20 @@ export default function StationsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="police">
-                          <span className="flex items-center gap-2">
-                            <IconShield size={14} stroke={1.5} className="text-blue-600" />
-                            Police
-                          </span>
+                          <StationTypeOption type="police" />
                         </SelectItem>
                         <SelectItem value="medical">
-                          <span className="flex items-center gap-2">
-                            <IconStethoscope size={14} stroke={1.5} className="text-green-600" />
-                            Medical
-                          </span>
+                          <StationTypeOption type="medical" />
                         </SelectItem>
                         <SelectItem value="fire">
-                          <span className="flex items-center gap-2">
-                            <IconFlame size={14} stroke={1.5} className="text-red-600" />
-                            Fire
-                          </span>
+                          <StationTypeOption type="fire" />
                         </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="city" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label htmlFor="city" className="text-label">
                       City
                     </Label>
                     <Input
@@ -366,7 +359,7 @@ export default function StationsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label htmlFor="phone" className="text-label">
                       Phone
                     </Label>
                     <Input
@@ -382,7 +375,7 @@ export default function StationsPage() {
                 {/* Row 3: Email, Capacity */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="col-span-2 space-y-1.5">
-                    <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label htmlFor="email" className="text-label">
                       Email
                     </Label>
                     <Input
@@ -396,7 +389,7 @@ export default function StationsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="capacity" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label htmlFor="capacity" className="text-label">
                       Capacity
                     </Label>
                     <Input
@@ -413,7 +406,7 @@ export default function StationsPage() {
                 {/* Row 4: Address (full width) */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="col-span-3 space-y-1.5">
-                    <Label htmlFor="address" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label htmlFor="address" className="text-label">
                       Address
                     </Label>
                     <Input
@@ -429,7 +422,7 @@ export default function StationsPage() {
                 {/* Row 5: Latitude, Longitude */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="latitude" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label htmlFor="latitude" className="text-label">
                       Latitude
                     </Label>
                     <Input
@@ -444,7 +437,7 @@ export default function StationsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="longitude" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label htmlFor="longitude" className="text-label">
                       Longitude
                     </Label>
                     <Input
@@ -471,15 +464,15 @@ export default function StationsPage() {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting} className="gap-2 bg-red-600 hover:bg-red-700">
+                  <Button type="submit" disabled={submitting} className="gap-2">
                     {submitting ? (
                       <>
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
                         Creating...
                       </>
                     ) : (
                       <>
-                        <IconCheck size={16} stroke={1.5} />
+                        <Check className="h-4 w-4" strokeWidth={1.75} />
                         Create Station
                       </>
                     )}
@@ -490,108 +483,74 @@ export default function StationsPage() {
           </Card>
         )}
 
-        {/* Filter & Search Bar */}
-        <Card className="mb-4 border-0 shadow-sm">
-          <CardContent className="flex items-center justify-between p-4">
-            <div className="flex flex-1 items-center gap-3">
-              <div className="relative flex-1 max-w-md">
-                <IconSearch size={18} stroke={1.5} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search stations..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {/* Active/Inactive Toggle Pills */}
-              <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
+        <FilterBar trailing={<span className="text-caption">{filteredStations.length} results</span>}>
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" strokeWidth={1.75} />
+            <Input
+              placeholder="Search stations..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
+            {(["all", "active", "inactive"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={cn(
+                  "rounded-md px-3 py-1 text-caption font-medium capitalize transition-colors",
+                  statusFilter === s ? "bg-background shadow-card" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {s === "all" ? "All" : s}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
+            <button
+              onClick={() => setTypeFilter("all")}
+              className={cn(
+                "rounded-md px-3 py-1 text-caption font-medium transition-colors",
+                typeFilter === "all" ? "bg-background shadow-card" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              All
+            </button>
+            {(["police", "medical", "fire"] as const).map((t) => {
+              const cfg = stationTypeStyle(t);
+              const TypeIcon = cfg.icon;
+              return (
                 <button
-                  onClick={() => setStatusFilter("all")}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                    statusFilter === "all" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  key={t}
+                  onClick={() => setTypeFilter(t)}
+                  className={cn(
+                    "flex items-center gap-1 rounded-md px-3 py-1 text-caption font-medium transition-colors",
+                    typeFilter === t ? "bg-background shadow-card" : "text-muted-foreground hover:text-foreground"
+                  )}
                 >
-                  All
+                  <TypeIcon className={cn("h-3.5 w-3.5", cfg.text)} strokeWidth={1.75} />
+                  {cfg.label}
                 </button>
-                <button
-                  onClick={() => setStatusFilter("active")}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                    statusFilter === "active" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Active
-                </button>
-                <button
-                  onClick={() => setStatusFilter("inactive")}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                    statusFilter === "inactive" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Inactive
-                </button>
-              </div>
-
-              {/* Type Filter Pills */}
-              <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
-                <button
-                  onClick={() => setTypeFilter("all")}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                    typeFilter === "all" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setTypeFilter("police")}
-                  className={`flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                    typeFilter === "police" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <IconShield size={14} stroke={1.5} />
-                  Police
-                </button>
-                <button
-                  onClick={() => setTypeFilter("medical")}
-                  className={`flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                    typeFilter === "medical" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <IconStethoscope size={14} stroke={1.5} />
-                  Medical
-                </button>
-                <button
-                  onClick={() => setTypeFilter("fire")}
-                  className={`flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                    typeFilter === "fire" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <IconFlame size={14} stroke={1.5} />
-                  Fire
-                </button>
-              </div>
-
-              <span className="text-sm text-muted-foreground">{filteredStations.length} results</span>
-            </div>
-          </CardContent>
-        </Card>
+              );
+            })}
+          </div>
+        </FilterBar>
 
         {/* Stations Table */}
         {loading ? (
-          <Card className="border-0 shadow-sm">
+          <Card className="rounded-xl border py-0 shadow-card">
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/30">
-                    <TableHead className="text-xs uppercase tracking-wider">Name</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider">Type</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider">City</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider">Phone</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider">Capacity</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider">Status</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider">Actions</TableHead>
+                    <TableHead className="text-label">Name</TableHead>
+                    <TableHead className="text-label">Type</TableHead>
+                    <TableHead className="text-label">City</TableHead>
+                    <TableHead className="text-label">Phone</TableHead>
+                    <TableHead className="text-label">Capacity</TableHead>
+                    <TableHead className="text-label">Status</TableHead>
+                    <TableHead className="text-label">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -628,37 +587,35 @@ export default function StationsPage() {
             </CardContent>
           </Card>
         ) : filteredStations.length === 0 ? (
-          <Card className="border-0 shadow-sm">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-muted/30">
-                <IconBuildingSkyscraper size={48} stroke={1} className="text-muted-foreground" />
-              </div>
-              <p className="text-lg font-semibold">No stations found</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {searchQuery || typeFilter !== "all" || statusFilter !== "all"
-                  ? "Try adjusting your filters"
-                  : "Add your first station to get started"}
-              </p>
-              {!searchQuery && typeFilter === "all" && statusFilter === "all" && (
-                <Button onClick={() => setShowAddForm(true)} className="mt-4 gap-2 bg-red-600 hover:bg-red-700">
-                  <IconPlus size={16} stroke={1.5} />
+          <EmptyState
+            icon={Building2}
+            title="No stations found"
+            description={
+              searchQuery || typeFilter !== "all" || statusFilter !== "all"
+                ? "Try adjusting your filters"
+                : "Add your first station to get started"
+            }
+            action={
+              !searchQuery && typeFilter === "all" && statusFilter === "all" ? (
+                <Button onClick={() => setShowAddForm(true)} className="gap-2">
+                  <Plus className="h-4 w-4" />
                   Add Station
                 </Button>
-              )}
-            </CardContent>
-          </Card>
+              ) : undefined
+            }
+          />
         ) : (
-          <Card className="overflow-hidden rounded-xl border-0 shadow-sm">
+          <Card className="overflow-hidden rounded-xl border py-0 shadow-card">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/30">
-                  <TableHead className="text-xs uppercase tracking-wider">Name</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Type</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">City</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Phone</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Capacity</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Status</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Actions</TableHead>
+                  <TableHead className="text-label">Name</TableHead>
+                  <TableHead className="text-label">Type</TableHead>
+                  <TableHead className="text-label">City</TableHead>
+                  <TableHead className="text-label">Phone</TableHead>
+                  <TableHead className="text-label">Capacity</TableHead>
+                  <TableHead className="text-label">Status</TableHead>
+                  <TableHead className="text-label">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -671,36 +628,19 @@ export default function StationsPage() {
                     <TableCell>
                       <div>
                         <p className="font-medium">{station.name}</p>
-                        <p className="text-xs font-mono text-muted-foreground">{String(station.id).slice(0, 8)}</p>
+                        <p className="text-data text-caption">{String(station.id).slice(0, 8)}</p>
                       </div>
                     </TableCell>
 
                     {/* TYPE */}
                     <TableCell>
-                      {station.type === "police" && (
-                        <Badge className="gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                          <IconShield size={14} stroke={1.5} />
-                          Police
-                        </Badge>
-                      )}
-                      {station.type === "medical" && (
-                        <Badge className="gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
-                          <IconStethoscope size={14} stroke={1.5} />
-                          Medical
-                        </Badge>
-                      )}
-                      {station.type === "fire" && (
-                        <Badge className="gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                          <IconFlame size={14} stroke={1.5} />
-                          Fire
-                        </Badge>
-                      )}
+                      <CategoryBadge category={station.type} />
                     </TableCell>
 
                     {/* CITY */}
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <IconMapPin size={14} stroke={1.5} className="text-muted-foreground" />
+                        <MapPin className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.75} />
                         <span className="text-sm">{station.city}</span>
                       </div>
                     </TableCell>
@@ -708,16 +648,16 @@ export default function StationsPage() {
                     {/* PHONE */}
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <IconPhone size={14} stroke={1.5} className="text-muted-foreground" />
-                        <span className="font-mono text-sm">{station.phone}</span>
+                        <Phone className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.75} />
+                        <span className="text-data">{station.phone}</span>
                       </div>
                     </TableCell>
 
                     {/* CAPACITY */}
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <IconUsers size={14} stroke={1.5} className="text-muted-foreground" />
-                        <span className="font-mono font-medium">{station.capacity}</span>
+                        <Users className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.75} />
+                        <span className="text-data font-medium">{station.capacity}</span>
                       </div>
                     </TableCell>
 
@@ -726,15 +666,15 @@ export default function StationsPage() {
                       {station.is_active ? (
                         <div className="flex items-center gap-2">
                           <span className="relative flex h-2 w-2">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span>
-                            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-600"></span>
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
                           </span>
-                          <span className="font-medium text-green-600">Active</span>
+                          <span className="font-medium text-success">Active</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-gray-400"></span>
-                          <span className="text-gray-400">Inactive</span>
+                          <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
+                          <span className="text-muted-foreground">Inactive</span>
                         </div>
                       )}
                     </TableCell>
@@ -750,7 +690,7 @@ export default function StationsPage() {
                           onClick={() => openEdit(station)}
                           className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
-                          <IconEdit size={16} stroke={1.5} />
+                          <Pencil className="h-4 w-4" strokeWidth={1.75} />
                         </Button>
                         {station.is_active ? (
                           <Button
@@ -760,12 +700,12 @@ export default function StationsPage() {
                             title="Deactivate station"
                             onClick={() => handleToggleActive(station)}
                             disabled={togglingId === station.id}
-                            className="h-8 w-8 p-0 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                            className="h-8 w-8 p-0 text-warning-foreground hover:bg-warning-muted hover:text-warning-foreground"
                           >
                             {togglingId === station.id ? (
-                              <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
                             ) : (
-                              <IconCircleX size={16} stroke={1.5} />
+                              <XCircle className="h-4 w-4" strokeWidth={1.75} />
                             )}
                           </Button>
                         ) : (
@@ -776,12 +716,12 @@ export default function StationsPage() {
                             title="Activate station"
                             onClick={() => handleToggleActive(station)}
                             disabled={togglingId === station.id}
-                            className="h-8 w-8 p-0 text-green-600 hover:bg-green-50 hover:text-green-700"
+                            className="h-8 w-8 p-0 text-success hover:bg-success-muted hover:text-success"
                           >
                             {togglingId === station.id ? (
-                              <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
                             ) : (
-                              <IconCircleCheck size={16} stroke={1.5} />
+                              <CheckCircle className="h-4 w-4" strokeWidth={1.75} />
                             )}
                           </Button>
                         )}
@@ -798,9 +738,9 @@ export default function StationsPage() {
                             })
                           }
                           disabled={deletingId === station.id}
-                          className="h-8 w-8 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+                          className="h-8 w-8 p-0 text-destructive hover:bg-status-routed-muted hover:text-destructive"
                         >
-                          <IconTrash size={16} stroke={1.5} />
+                          <Trash2 className="h-4 w-4" strokeWidth={1.75} />
                         </Button>
                       </div>
                     </TableCell>
@@ -811,15 +751,12 @@ export default function StationsPage() {
 
             {/* Pagination/Count */}
             <div className="border-t px-4 py-3">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-caption">
                 Showing {filteredStations.length} of {stations.length} stations
               </p>
             </div>
           </Card>
         )}
-      </main>
-
-      {/* Edit Station Dialog */}
       <Dialog
         open={editingStation !== null}
         onOpenChange={(open) => {
@@ -832,7 +769,7 @@ export default function StationsPage() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <IconEdit size={20} stroke={1.5} />
+              <Pencil className="h-5 w-5" strokeWidth={1.75} />
               Edit station
             </DialogTitle>
             <DialogDescription>
@@ -841,7 +778,7 @@ export default function StationsPage() {
           </DialogHeader>
           <form onSubmit={handleUpdate} className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Label className="text-label">
                 Station name
               </Label>
               <Input
@@ -852,7 +789,7 @@ export default function StationsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Label className="text-label">
                   Type
                 </Label>
                 <Select
@@ -870,7 +807,7 @@ export default function StationsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Label className="text-label">
                   City
                 </Label>
                 <Input
@@ -882,7 +819,7 @@ export default function StationsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Label className="text-label">
                   Phone
                 </Label>
                 <Input
@@ -892,7 +829,7 @@ export default function StationsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Label className="text-label">
                   Capacity
                 </Label>
                 <Input
@@ -904,7 +841,7 @@ export default function StationsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Label className="text-label">
                 Email
               </Label>
               <Input
@@ -915,7 +852,7 @@ export default function StationsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Label className="text-label">
                 Address
               </Label>
               <Input
@@ -926,7 +863,7 @@ export default function StationsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Label className="text-label">
                   Latitude
                 </Label>
                 <Input
@@ -938,7 +875,7 @@ export default function StationsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Label className="text-label">
                   Longitude
                 </Label>
                 <Input
@@ -961,11 +898,11 @@ export default function StationsPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={editSubmitting} className="gap-2 bg-red-600 hover:bg-red-700">
+              <Button type="submit" disabled={editSubmitting} className="gap-2">
                 {editSubmitting ? (
-                  <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
                 ) : (
-                  <IconCheck size={16} stroke={1.5} />
+                  <Check className="h-4 w-4" strokeWidth={1.75} />
                 )}
                 Save changes
               </Button>
@@ -979,7 +916,7 @@ export default function StationsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <IconTrash size={20} stroke={1.5} className="text-red-600" />
+              <Trash2 className="h-5 w-5 text-destructive" strokeWidth={1.75} />
               Delete Station
             </DialogTitle>
             <DialogDescription>
@@ -995,12 +932,12 @@ export default function StationsPage() {
               onClick={() => deleteDialog.stationId && handleDelete(deleteDialog.stationId)}
               className="gap-2"
             >
-              <IconTrash size={16} stroke={1.5} />
+              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
               Delete Station
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </AppShell>
   );
 }

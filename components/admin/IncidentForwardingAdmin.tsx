@@ -14,6 +14,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import CategoryBadge from "@/components/incidents/CategoryBadge";
+import EmptyState from "@/components/dashboard/EmptyState";
+import PageSection from "@/components/layout/PageSection";
 import { incidentForwardingAdminAPI } from "@/lib/api";
 import { useToast } from "@/lib/useToast";
 import type { StationNonResponseStat } from "@/types";
@@ -67,7 +70,7 @@ export default function IncidentForwardingAdmin() {
 
   if (loading) {
     return (
-      <Card className="border-0 shadow-sm">
+      <Card className="rounded-xl border py-0 shadow-card">
         <CardContent className="flex items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </CardContent>
@@ -75,87 +78,99 @@ export default function IncidentForwardingAdmin() {
     );
   }
 
+  const rankedStats = stats
+    .filter((s) => s.non_response_count > 0)
+    .sort((a, b) => b.non_response_count - a.non_response_count);
+
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-            <Clock className="h-4 w-4 text-primary" />
-            Auto-forward timeout
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            If an incident stays <span className="font-medium">routed</span> or{" "}
-            <span className="font-medium">pending</span> and no operator at the assigned
-            station opens it within this time, the system forwards it to the nearest
-            same-type station.
-          </p>
-          <div className="space-y-2">
-            <Label htmlFor="forward-minutes">Minutes (min 1)</Label>
-            <Input
-              id="forward-minutes"
-              type="number"
-              min={1}
-              value={minutes}
-              onChange={(e) => setMinutes(e.target.value)}
-              className="max-w-[140px]"
-            />
-          </div>
-          <Button onClick={saveSettings} disabled={saving} className="gap-2">
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : null}
-            Save settings
-          </Button>
-        </CardContent>
-      </Card>
+      <PageSection title="Auto-forward timeout">
+        <Card className="rounded-xl border py-0 shadow-card">
+          <CardHeader className="px-5 pt-5 pb-0">
+            <CardTitle className="flex items-center gap-2 text-section-title">
+              <Clock className="h-4 w-4 text-primary" />
+              Timeout settings
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 px-5 pb-5">
+            <p className="text-caption">
+              If an incident stays <span className="font-medium text-foreground">routed</span> or{" "}
+              <span className="font-medium text-foreground">pending</span> and no operator at the
+              assigned station opens it within this time, the system forwards it to the nearest
+              same-type station.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="forward-minutes" className="text-label">
+                Minutes (min 1)
+              </Label>
+              <Input
+                id="forward-minutes"
+                type="number"
+                min={1}
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value)}
+                className="max-w-[140px]"
+              />
+            </div>
+            <Button onClick={saveSettings} disabled={saving} className="gap-2">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save settings
+            </Button>
+          </CardContent>
+        </Card>
+      </PageSection>
 
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-            <ShieldAlert className="h-4 w-4 text-amber-600" />
-            Station non-response ({totalNonResponses})
-          </CardTitle>
-          <Button variant="ghost" size="sm" onClick={load} className="gap-1.5">
+      <PageSection
+        title={`Station non-response (${totalNonResponses})`}
+        action={
+          <Button variant="ghost" size="sm" onClick={load} className="gap-1.5 text-caption">
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
           </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          {stats.length === 0 ? (
-            <p className="px-5 pb-5 text-sm text-muted-foreground">
-              No non-response events recorded yet.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Station</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Count</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stats
-                  .filter((s) => s.non_response_count > 0)
-                  .sort((a, b) => b.non_response_count - a.non_response_count)
-                  .map((s) => (
+        }
+      >
+        <Card className="overflow-hidden rounded-xl border py-0 shadow-card">
+          <CardHeader className="sr-only">
+            <CardTitle className="flex items-center gap-2 text-section-title">
+              <ShieldAlert className="h-4 w-4 text-warning-foreground" />
+              Non-response stats
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {rankedStats.length === 0 ? (
+              <EmptyState
+                icon={ShieldAlert}
+                title="No non-response events"
+                description="Stations with missed dispatch windows will appear here."
+                className="py-12"
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="text-label">Station</TableHead>
+                    <TableHead className="text-label">Type</TableHead>
+                    <TableHead className="text-right text-label">Count</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rankedStats.map((s) => (
                     <TableRow key={s.id}>
-                      <TableCell className="font-medium">{s.name}</TableCell>
-                      <TableCell className="capitalize text-muted-foreground">
-                        {s.type_display ?? s.type}
+                      <TableCell className="text-body font-medium">{s.name}</TableCell>
+                      <TableCell>
+                        <CategoryBadge category={s.type_display ?? s.type} />
                       </TableCell>
-                      <TableCell className="text-right font-mono">
+                      <TableCell className="text-right text-data font-semibold">
                         {s.non_response_count}
                       </TableCell>
                     </TableRow>
                   ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </PageSection>
     </div>
   );
 }

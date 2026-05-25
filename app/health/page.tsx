@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Activity, ArrowLeft } from "lucide-react";
 
 export default function HealthPage() {
   const [status, setStatus] = useState<null | "loading" | "success" | "error">(null);
@@ -23,72 +26,71 @@ export default function HealthPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+    <main className="relative flex min-h-screen flex-col items-center justify-center bg-background p-6">
       <Link
         href="/login"
-        className="absolute top-6 left-6 inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-base font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
-        style={{ color: "var(--primary)" }}
+        className="absolute left-6 top-6 inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-body font-medium text-primary transition-colors hover:bg-accent hover:text-accent-foreground"
       >
-        ← Back to login
+        <ArrowLeft className="h-4 w-4" />
+        Back to login
       </Link>
 
-      <div className="flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-full px-4 py-2 mb-6">
-        <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-        <span className="text-sm font-medium" style={{ color: "var(--primary)" }}>
-          System Online
-        </span>
+      <div className="mb-6 flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+        <span className="text-body font-medium text-primary">System Online</span>
       </div>
 
-      <h1 className="text-5xl font-bold mb-2">ERAS Dashboard</h1>
-      <p className="text-muted-foreground text-lg mb-10">
+      <div className="mb-2 flex items-center gap-3">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+          <Activity className="h-6 w-6 text-primary" strokeWidth={1.75} />
+        </div>
+        <h1 className="text-page-title text-5xl">ERAS Dashboard</h1>
+      </div>
+      <p className="mb-10 text-body text-muted-foreground">
         Emergency Report and Alert System
       </p>
 
-      <div className="flex gap-4 mb-10">
-        <div className="bg-card border border-border rounded-xl px-8 py-6 text-center">
-          <p className="text-2xl font-bold" style={{ color: "var(--chart-3)" }}>
-            ✓ Alive
-          </p>
-          <p className="text-muted-foreground text-sm mt-1">Dashboard</p>
-        </div>
-        <div className="bg-card border border-border rounded-xl px-8 py-6 text-center">
-          <p
-            className="text-2xl font-bold"
-            style={{
-              color:
+      <div className="mb-10 flex gap-4">
+        <Card className="rounded-xl border py-0 shadow-card">
+          <CardContent className="px-8 py-6 text-center">
+            <p className="text-data text-2xl font-bold text-success">✓ Alive</p>
+            <p className="mt-1 text-caption">Dashboard</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-xl border py-0 shadow-card">
+          <CardContent className="px-8 py-6 text-center">
+            <p
+              className={`text-data text-2xl font-bold ${
                 status === "success"
-                  ? "var(--chart-3)"
+                  ? "text-success"
                   : status === "error"
-                    ? "var(--destructive)"
-                    : "var(--muted-foreground)",
-            }}
-          >
-            {status === "success" ? "✓ Alive" : status === "error" ? "✗ Down" : "..."}
-          </p>
-          <p className="text-muted-foreground text-sm mt-1">Backend</p>
-        </div>
+                    ? "text-destructive"
+                    : "text-muted-foreground"
+              }`}
+            >
+              {status === "success" ? "✓ Alive" : status === "error" ? "✗ Down" : "..."}
+            </p>
+            <p className="mt-1 text-caption">Backend</p>
+          </CardContent>
+        </Card>
       </div>
 
-      <button
+      <Button
         onClick={pingBackend}
         disabled={status === "loading"}
-        className="bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 font-semibold px-8 py-3 rounded-lg transition-opacity"
+        size="lg"
+        className="font-semibold"
       >
         {status === "loading" ? "Pinging..." : "Ping Backend"}
-      </button>
+      </Button>
 
       {response && (
-        <pre
-          className="mt-6 bg-card border border-border rounded-xl p-4 text-sm max-w-lg overflow-auto"
-          style={{ color: "var(--chart-3)" }}
-        >
+        <pre className="mt-6 max-w-lg overflow-auto rounded-xl border border-border bg-card p-4 text-data text-sm text-success shadow-card">
           {response}
         </pre>
       )}
 
-      <p className="text-muted-foreground text-xs mt-10">
-        ERAS — Adama Science and Technology University
-      </p>
+      <p className="mt-10 text-caption">ERAS — Adama Science and Technology University</p>
     </main>
   );
 }

@@ -11,12 +11,14 @@ import {
   Phone,
   User,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import Sidebar from "@/components/layout/Sidebar";
+import AppShell from "@/components/layout/AppShell";
+import PageHeader from "@/components/layout/PageHeader";
+import PageSection from "@/components/layout/PageSection";
 import { authAPI } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/lib/useToast";
@@ -32,17 +34,11 @@ function AccountField({
 }) {
   return (
     <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/5 px-4 py-3">
-      <div
-        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-        style={{
-          backgroundColor: "color-mix(in oklch, var(--primary) 10%, transparent)",
-          color: "var(--primary)",
-        }}
-      >
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <p className="text-label">
           {label}
         </p>
         <p className="mt-0.5 truncate text-sm font-medium">{value || "—"}</p>
@@ -98,52 +94,31 @@ export default function OperatorSettingsPage() {
 
   if (checking) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <AppShell role="operator">
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar role="operator" />
-
-      <main className="flex-1 overflow-y-auto bg-background p-6">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-xl"
-              style={{
-                backgroundColor:
-                  "color-mix(in oklch, var(--primary) 12%, transparent)",
-                color: "var(--primary)",
-              }}
-            >
-              <KeyRound className="h-5 w-5" />
-            </div>
-            <div>
-              <h1
-                className="text-2xl font-bold"
-                style={{ letterSpacing: "-0.03em" }}
-              >
-                Account settings
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Manage your profile and security
-              </p>
-            </div>
-          </div>
+    <AppShell role="operator">
+      <PageHeader
+        icon={KeyRound}
+        title="Account settings"
+        subtitle="Manage your profile and security"
+        actions={
           <Badge variant="secondary" className="capitalize">
             {user?.role ?? "operator"}
           </Badge>
-        </div>
+        }
+      />
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
-          <Card className="border-0 shadow-sm xl:col-span-2">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Profile</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+        <PageSection title="Profile" className="xl:col-span-2">
+          <Card className="border-0 shadow-sm">
+            <CardContent className="space-y-3 pt-6">
               <AccountField icon={User} label="Full name" value={user?.full_name ?? ""} />
               <AccountField icon={Mail} label="Email" value={user?.email ?? ""} />
               <AccountField icon={Phone} label="Phone" value={user?.phone ?? ""} />
@@ -151,7 +126,7 @@ export default function OperatorSettingsPage() {
                 <div className="rounded-lg border border-border bg-muted/5 px-4 py-3">
                   <div className="mb-2 flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-primary" />
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <p className="text-label">
                       Assigned station
                     </p>
                   </div>
@@ -163,12 +138,11 @@ export default function OperatorSettingsPage() {
               )}
             </CardContent>
           </Card>
+        </PageSection>
 
-          <Card className="border-0 shadow-sm xl:col-span-3">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Change password</CardTitle>
-            </CardHeader>
-            <CardContent>
+        <PageSection title="Change password" className="xl:col-span-3">
+          <Card className="border-0 shadow-sm">
+            <CardContent className="pt-6">
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2 md:col-span-2">
@@ -243,8 +217,8 @@ export default function OperatorSettingsPage() {
               </form>
             </CardContent>
           </Card>
-        </div>
-      </main>
-    </div>
+        </PageSection>
+      </div>
+    </AppShell>
   );
 }

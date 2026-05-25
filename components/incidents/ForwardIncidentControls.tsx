@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  IconArrowsRightLeft,
-  IconBuildingHospital,
-  IconLoader2,
-  IconRadar,
-} from "@tabler/icons-react";
+  ArrowRightLeft,
+  Building2,
+  Loader2,
+  Radar,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -189,7 +189,7 @@ export default function ForwardIncidentControls({
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+      <p className="text-label">
         Forward to another station
       </p>
       <p className="text-xs text-muted-foreground">
@@ -202,7 +202,7 @@ export default function ForwardIncidentControls({
       <Button
         type="button"
         variant="outline"
-        className="w-full gap-2 rounded-xl border-indigo-200 bg-indigo-50/50 text-indigo-900 hover:bg-indigo-50"
+        className="w-full gap-2 rounded-xl border-info/20 bg-info-muted text-info-foreground hover:bg-info-muted/80"
         disabled={disabled || busy || nearestOptions.length === 0}
         onClick={() => {
           resetDialogState();
@@ -211,7 +211,7 @@ export default function ForwardIncidentControls({
           setNearestOpen(true);
         }}
       >
-        <IconRadar size={16} stroke={1.5} />
+        <Radar className="h-4 w-4" strokeWidth={1.75} />
         Forward to nearest station
       </Button>
 
@@ -227,7 +227,7 @@ export default function ForwardIncidentControls({
           setSelectOpen(true);
         }}
       >
-        <IconArrowsRightLeft size={16} stroke={1.5} />
+        <ArrowRightLeft className="h-4 w-4" strokeWidth={1.75} />
         Forward to selected location
       </Button>
 
@@ -249,7 +249,7 @@ export default function ForwardIncidentControls({
           </DialogHeader>
 
           {inlineError && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <div className="rounded-xl border border-warning/25 bg-warning-muted px-3 py-2 text-sm text-warning-foreground">
               {inlineError}
             </div>
           )}
@@ -260,8 +260,8 @@ export default function ForwardIncidentControls({
 
           <div className="rounded-xl border bg-muted/40 p-4">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
-                <IconBuildingHospital size={20} stroke={1.5} />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-info-muted text-info">
+                <Building2 className="h-5 w-5" strokeWidth={1.75} />
               </div>
               <div className="text-sm text-muted-foreground">
                 Current:{" "}
@@ -322,7 +322,7 @@ export default function ForwardIncidentControls({
               disabled={busy || nearestOptions.length === 0}
             >
               {busy ? (
-                <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
               ) : (
                 "Confirm forward"
               )}
@@ -348,7 +348,7 @@ export default function ForwardIncidentControls({
           </DialogHeader>
 
           {inlineError && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <div className="rounded-xl border border-warning/25 bg-warning-muted px-3 py-2 text-sm text-warning-foreground">
               {inlineError}
             </div>
           )}
@@ -377,7 +377,7 @@ export default function ForwardIncidentControls({
             <Label className="text-xs">Destination station</Label>
             {loadingStations ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
-                <IconLoader2 size={20} stroke={1.5} className="animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.75} />
               </div>
             ) : rankedStations.length === 0 ? (
               <p className="text-sm text-muted-foreground">No stations available.</p>
@@ -414,7 +414,7 @@ export default function ForwardIncidentControls({
               disabled={busy || !selectedStationId}
             >
               {busy ? (
-                <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
               ) : (
                 "Confirm forward"
               )}

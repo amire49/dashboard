@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-export const ROUTE_COLOR = "#4285F4";
+import { themeColor } from "@/lib/status-styles";
+
+export function routeColor(): string {
+  return themeColor("info");
+}
 
 export function fixLeafletDefaultIcons(L: any) {
   delete L.Icon.Default.prototype._getIconUrl;
@@ -24,18 +28,20 @@ export function addDefaultStreetTiles(map: any, L: any) {
 }
 
 export function addSatelliteTiles(map: any, L: any) {
-  L.tileLayer(
+  const imagery = L.tileLayer(
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     {
       attribution: '© <a href="https://www.esri.com/">Esri</a>',
       maxZoom: 19,
     }
-  ).addTo(map);
+  );
 
-  L.tileLayer(
+  const labels = L.tileLayer(
     "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 19 }
-  ).addTo(map);
+  );
+
+  return L.layerGroup([imagery, labels]).addTo(map);
 }
 
 function svgPinDataUrl(color: string, inner: string): string {
@@ -48,9 +54,10 @@ function svgPinDataUrl(color: string, inner: string): string {
   return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
 
-export function createIncidentPin(L: any, color = "#ef4444") {
+export function createIncidentPin(L: any, color?: string) {
+  const fill = color ?? themeColor("primary");
   return L.icon({
-    iconUrl: svgPinDataUrl(color, '<circle cx="14" cy="14" r="5" fill="white"/>'),
+    iconUrl: svgPinDataUrl(fill, '<circle cx="14" cy="14" r="5" fill="white"/>'),
     iconSize: [28, 36],
     iconAnchor: [14, 36],
     popupAnchor: [0, -36],
@@ -58,9 +65,10 @@ export function createIncidentPin(L: any, color = "#ef4444") {
 }
 
 export function createUnitPin(L: any) {
+  const fill = themeColor("info");
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-      <circle cx="16" cy="16" r="14" fill="#4285F4" stroke="white" stroke-width="3"/>
+      <circle cx="16" cy="16" r="14" fill="${fill}" stroke="white" stroke-width="3"/>
       <circle cx="16" cy="16" r="5" fill="white"/>
     </svg>`.trim();
   const iconUrl =
@@ -87,7 +95,7 @@ export function drawRoute(
   options: DrawRouteOptions = {}
 ): any {
   return L.polyline(coordinates, {
-    color: options.color ?? ROUTE_COLOR,
+    color: options.color ?? routeColor(),
     weight: options.weight ?? 5,
     opacity: options.opacity ?? 0.9,
     lineCap: "round",

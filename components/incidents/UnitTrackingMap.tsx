@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IconCar, IconLoader2, IconMapPin } from "@tabler/icons-react";
+import { Car, Loader2, MapPin } from "lucide-react";
 import { incidentsAPI } from "@/lib/api";
 import {
   addDefaultStreetTiles,
@@ -134,13 +134,18 @@ export default function UnitTrackingMap({
   useEffect(() => {
     if (!mapRef.current || !enabled) return;
 
+    let mounted = true;
+
     import("leaflet").then((L) => {
-      if (!mapRef.current) return;
+      if (!mounted || !mapRef.current) return;
 
       if (!leafletMapRef.current) {
+        const container = mapRef.current;
+        if ((container as { _leaflet_id?: number })._leaflet_id) return;
+
         fixLeafletDefaultIcons(L);
 
-        const map = L.map(mapRef.current, {
+        const map = L.map(container, {
           center: [incidentLat, incidentLng],
           zoom: 14,
           zoomControl: true,
@@ -187,6 +192,10 @@ export default function UnitTrackingMap({
         map.setView([incidentLat, incidentLng], 14);
       }
     });
+
+    return () => {
+      mounted = false;
+    };
   }, [enabled, incidentLat, incidentLng, unitLocation, updateRoute]);
 
   useEffect(() => {
@@ -197,6 +206,9 @@ export default function UnitTrackingMap({
         markersRef.current = {};
         routeLayerRef.current = null;
       }
+      if (mapRef.current) {
+        delete (mapRef.current as { _leaflet_id?: number })._leaflet_id;
+      }
     };
   }, []);
 
@@ -205,39 +217,36 @@ export default function UnitTrackingMap({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <IconMapPin size={14} stroke={1.5} />
+        <MapPin className="h-3.5 w-3.5" strokeWidth={1.75} />
         <span>
-          <span className="inline-block h-2 w-2 rounded-full bg-red-500 mr-1" />
+          <span className="mr-1 inline-block h-2 w-2 rounded-full bg-primary" />
           Incident
-          <span className="inline-block h-2 w-2 rounded-full bg-blue-500 mx-1 ml-2" />
+          <span className="mx-1 ml-2 inline-block h-2 w-2 rounded-full bg-info" />
           Unit
         </span>
         {unitLocation?.recorded_at && (
-          <span className="ml-auto font-mono text-[10px]">
+          <span className="text-data ml-auto">
             Updated {new Date(unitLocation.recorded_at).toLocaleTimeString()}
           </span>
         )}
       </div>
 
-      <div
-        className="relative overflow-hidden rounded-xl border"
-        style={{ height: 280, borderColor: "var(--border)" }}
-      >
+      <div className="relative h-[280px] overflow-hidden rounded-xl border">
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/50">
-            <IconLoader2 size={20} stroke={1.5} className="animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.75} />
           </div>
         )}
 
         {routeLoading && unitLocation && !loading && (
-          <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-md">
+          <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-card/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-md">
             Calculating route…
           </div>
         )}
 
         {routeSummary && unitLocation && !routeLoading && (
-          <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-foreground shadow-md">
-            <IconCar size={14} stroke={1.5} className="text-[#4285F4]" />
+          <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-md">
+            <Car className="h-3.5 w-3.5 text-info" strokeWidth={1.75} />
             {routeSummary}
             {routeApproximate && (
               <span className="font-normal text-muted-foreground">(approx.)</span>
@@ -249,7 +258,7 @@ export default function UnitTrackingMap({
           rel="stylesheet"
           href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         />
-        <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
+        <div ref={mapRef} className="h-full w-full" />
       </div>
 
       {!loading && !unitLocation && !error && (
@@ -258,7 +267,7 @@ export default function UnitTrackingMap({
         </p>
       )}
       {error && (
-        <p className="text-xs text-red-500">Could not load unit tracking.</p>
+        <p className="text-xs text-destructive">Could not load unit tracking.</p>
       )}
     </div>
   );

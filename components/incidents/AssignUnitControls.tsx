@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import {
-  IconAmbulance,
-  IconLoader2,
-  IconUnlink,
-  IconUsers,
-} from "@tabler/icons-react";
+  Ambulance,
+  Loader2,
+  Unlink,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -101,15 +101,12 @@ export default function AssignUnitControls({
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+      <p className="text-label">
         Response unit
       </p>
 
       {incident.assigned_unit ? (
-        <div
-          className="rounded-xl border px-3 py-2.5 text-sm"
-          style={{ borderColor: "var(--border)", backgroundColor: "var(--muted)" }}
-        >
+        <div className="rounded-xl border border-border bg-muted px-3 py-2.5 text-sm">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-semibold">{incident.assigned_unit.name}</p>
@@ -120,12 +117,12 @@ export default function AssignUnitControls({
                   : ""}
               </p>
               {incident.unit_assigned_at && (
-                <p className="mt-1 text-[10px] text-muted-foreground">
+                <p className="text-data mt-1 text-muted-foreground">
                   Assigned {new Date(incident.unit_assigned_at).toLocaleString()}
                 </p>
               )}
             </div>
-            <IconAmbulance size={18} stroke={1.5} className="shrink-0 text-primary" />
+            <Ambulance className="h-[18px] w-[18px] shrink-0 text-primary" strokeWidth={1.75} />
           </div>
         </div>
       ) : (
@@ -140,7 +137,7 @@ export default function AssignUnitControls({
             disabled={disabled || busy}
             onClick={() => setAssignOpen(true)}
           >
-            <IconUsers size={16} stroke={1.5} />
+            <Users className="h-4 w-4" strokeWidth={1.75} />
             Assign unit
           </Button>
         )}
@@ -152,9 +149,9 @@ export default function AssignUnitControls({
             onClick={handleDetach}
           >
             {busy ? (
-              <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
             ) : (
-              <IconUnlink size={16} stroke={1.5} />
+              <Unlink className="h-4 w-4" strokeWidth={1.75} />
             )}
             Detach unit
           </Button>
@@ -172,10 +169,10 @@ export default function AssignUnitControls({
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label className="text-xs">Unit</Label>
+            <Label className="text-label">Unit</Label>
             {loadingUnits ? (
               <div className="flex justify-center py-6 text-muted-foreground">
-                <IconLoader2 size={20} stroke={1.5} className="animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.75} />
               </div>
             ) : units.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -211,7 +208,7 @@ export default function AssignUnitControls({
               onClick={handleAssign}
             >
               {busy ? (
-                <IconLoader2 size={16} stroke={1.5} className="animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
               ) : (
                 "Confirm assign"
               )}
